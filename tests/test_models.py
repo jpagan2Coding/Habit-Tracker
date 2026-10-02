@@ -39,3 +39,11 @@ def test_habit_completed_dates_can_store_text(app):
     )
 
     assert habit.completed_dates == '2026-10-01,2026-10-02'
+
+# new test case!
+def test_register_get_returns_ok(client):
+    """Test that GET /register loads the registration page successfully."""
+    response = client.get('/register')
+
+    assert response.status_code == 200
+    assert b'Register' in response.data
