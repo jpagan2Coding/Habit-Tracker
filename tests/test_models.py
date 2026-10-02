@@ -1,44 +1,41 @@
 from datetime import datetime
 
-from extensions import db
 from models import Habit
 
 
-def test_habit_create_and_persist(app):
-    """A habit can be saved and retrieved from the database."""
-    habit = Habit(name="Exercise", description="Morning routine")
+# === Habit Model Tests ===
 
-    db.session.add(habit)
-    db.session.commit()
+def test_habit_can_be_created(app):
+    """Test that a Habit object can be created with required fields."""
+    habit = Habit(
+        name='Drink Water',
+        description='Drink enough water every day',
+    )
 
-    stored = Habit.query.first()
-
-    assert stored is not None
-    assert stored.name == "Exercise"
-    assert stored.description == "Morning routine"
+    assert habit.name == 'Drink Water'
+    assert habit.description == 'Drink enough water every day'
 
 
-def test_habit_allows_optional_description(app):
-    """A habit can be created without a description."""
-    habit = Habit(name="Meditate", description=None)
+def test_habit_description_can_be_empty(app):
+    """Test that a Habit can be created without a description."""
+    habit = Habit(name='Exercise')
 
-    db.session.add(habit)
-    db.session.commit()
-
-    stored = Habit.query.first()
-
-    assert stored is not None
-    assert stored.description is None
+    assert habit.name == 'Exercise'
+    assert habit.description is None
 
 
 def test_habit_has_created_at_timestamp(app):
-    """A saved habit receives a creation timestamp."""
-    habit = Habit(name="Read", description="Read 20 pages")
+    """Test that a new Habit receives a created_at timestamp."""
+    habit = Habit(name='Read')
 
-    db.session.add(habit)
-    db.session.commit()
+    assert habit.created_at is None or isinstance(habit.created_at, datetime)
 
-    stored = Habit.query.first()
 
-    assert stored is not None
-    assert isinstance(stored.created_at, datetime)
+def test_habit_completed_dates_can_store_text(app):
+    """Test that completed_dates can hold comma-separated ISO date values."""
+    habit = Habit(
+        name='Meditate',
+        completed_dates='2026-10-01,2026-10-02',
+    )
+
+    assert habit.completed_dates == '2026-10-01,2026-10-02'

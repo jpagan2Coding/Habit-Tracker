@@ -1,0 +1,489 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | Habit Tracker{% endblock %}
+
+{% block extra_head %}
+<style>
+    .dashboard-shell {
+        margin: -2rem -1rem;
+        height: calc(100vh - 64px);
+        overflow: hidden;
+        background: #f5f7fb;
+    }
+
+    .dashboard-content-scroll {
+        height: 100%;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 transparent;
+    }
+
+    .dashboard-content-scroll::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .dashboard-content-scroll::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    .dashboard-content-scroll::-webkit-scrollbar-thumb {
+        border-radius: 9999px;
+        background: #cbd5e1;
+    }
+
+    .dashboard-content-scroll::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
+
+    .sidebar-link {
+        transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .summary-card,
+    .habit-row,
+    .habit-table-card {
+        box-shadow: 0 2px 7px rgba(15, 23, 42, 0.08);
+    }
+
+    @media (min-width: 640px) {
+        .dashboard-shell {
+            margin: -2rem -1.5rem;
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .dashboard-shell {
+            margin: -2rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-shell flex">
+
+    <!-- Sidebar -->
+    <aside class="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
+        <div class="border-b border-slate-200 px-7 py-6">
+            <div class="flex items-center gap-3">
+                <div class="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-white">
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                        ></path>
+                    </svg>
+                </div>
+
+                <span class="text-lg font-bold text-slate-900">
+                    Habit Tracker
+                </span>
+            </div>
+        </div>
+
+        <nav class="flex-1 px-4 py-7">
+            <p class="mb-3 px-3 text-xs font-bold tracking-wide text-slate-400">
+                MENU
+            </p>
+
+            <a
+                href="{{ url_for('habit_dashboard') }}"
+                class="sidebar-link mb-2 flex items-center gap-3 rounded-lg bg-indigo-50 px-4 py-3 font-semibold text-indigo-700"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M3 13h2l2-6 4 12 3-8 2 2h5"
+                    ></path>
+                </svg>
+                Dashboard
+            </a>
+
+            <a
+                href="{{ url_for('habit_tracker') }}"
+                class="sidebar-link mb-2 flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            >
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    ></path>
+                </svg>
+                My Habits
+            </a>
+
+            <span class="mb-2 flex cursor-not-allowed items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-400">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M3 3v18h18M7 15l3-3 3 2 4-5"
+                    ></path>
+                </svg>
+                Progress
+            </span>
+        </nav>
+
+        <div class="border-t border-slate-200 p-4">
+            <span class="mb-2 flex cursor-not-allowed items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-400">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z"
+                    ></path>
+                </svg>
+                Settings
+            </span>
+
+            <span class="flex cursor-not-allowed items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-400">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M10 17l5-5-5-5M15 12H3"
+                    ></path>
+                </svg>
+                Logout
+            </span>
+        </div>
+    </aside>
+
+    <!-- Main Dashboard Area -->
+    <div class="min-w-0 flex-1 overflow-hidden">
+
+        <!-- Top header -->
+        <header class="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
+            <h1 class="text-xl font-bold text-slate-900">
+                Dashboard
+            </h1>
+
+            <div class="flex items-center gap-3">
+                <span class="hidden h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-700 sm:flex">
+                    U
+                </span>
+
+                <span class="hidden font-semibold text-slate-700 sm:block">
+                    User
+                </span>
+            </div>
+        </header>
+
+        <!-- Scrollable dashboard content -->
+        <main class="dashboard-content-scroll p-5 sm:p-8">
+
+            <!-- Welcome section -->
+            <section class="mb-6 flex flex-col justify-between gap-5 xl:flex-row xl:items-center">
+                <div>
+                    <h2 class="text-3xl font-bold text-slate-900">
+                        Welcome back!
+                    </h2>
+
+                    <p class="mt-1 text-slate-500">
+                        Stay consistent and keep building your habits.
+                    </p>
+                </div>
+
+                <a
+                    href="{{ url_for('habit_tracker') }}"
+                    class="inline-flex w-fit items-center gap-2 rounded-lg bg-blue-950 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-900"
+                >
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="2"
+                            d="M12 4v16m8-8H4"
+                        ></path>
+                    </svg>
+                    Add New Habit
+                </a>
+            </section>
+
+            <!-- Summary cards -->
+            <section class="mb-6 grid gap-5 md:grid-cols-3">
+                <article class="summary-card rounded-xl border border-slate-200 bg-white p-5">
+                    <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50 text-indigo-700">
+                        <span class="text-lg font-bold">#</span>
+                    </div>
+
+                    <p class="text-sm font-medium text-slate-500">
+                        Total Habits
+                    </p>
+
+                    <p class="mt-2 text-3xl font-bold text-slate-900">
+                        {{ total_habits }}
+                    </p>
+
+                    <p class="mt-1 text-sm text-slate-400">
+                        Active habits
+                    </p>
+                </article>
+
+                <article class="summary-card rounded-xl border border-slate-200 bg-white p-5">
+                    <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                        <span class="text-lg font-bold">#</span>
+                    </div>
+
+                    <p class="text-sm font-medium text-slate-500">
+                        Completed Today
+                    </p>
+
+                    <p class="mt-2 text-3xl font-bold text-slate-900">
+                        {{ completed_today }}
+                    </p>
+
+                    <p class="mt-1 text-sm text-slate-400">
+                        Out of {{ scheduled_today }} · {{ completion_percentage }}%
+                    </p>
+                </article>
+
+                <article class="summary-card rounded-xl border border-slate-200 bg-white p-5">
+                    <div class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+                        <span class="text-lg font-bold">#</span>
+                    </div>
+
+                    <p class="text-sm font-medium text-slate-500">
+                        Current Streak
+                    </p>
+
+                    <p class="mt-2 text-3xl font-bold text-purple-600">
+                        {% if current_streak is not none %}
+                            {{ current_streak }} days
+                        {% else %}
+                            —
+                        {% endif %}
+                    </p>
+
+                    <p class="mt-1 text-sm text-slate-400">
+                        {% if current_streak is not none %}
+                            Keep it going!
+                        {% else %}
+                            Coming in a future sprint
+                        {% endif %}
+                    </p>
+                </article>
+            </section>
+
+            <!-- Today's Habits -->
+            <section class="mb-6">
+                <div class="mb-4">
+                    <h2 class="text-2xl font-bold text-slate-900">
+                        Today's Habits
+                    </h2>
+
+                    <p class="mt-1 text-slate-400">
+                        Habits you need to complete today
+                    </p>
+                </div>
+
+                {% if habits %}
+                    <div class="space-y-3">
+                        {% for habit in habits[:3] %}
+                            {% set is_completed = habit.completed_dates and today in habit.completed_dates.split(',') %}
+                            {% set progress_value = 100 if is_completed else 0 %}
+
+                            <article class="habit-row rounded-xl border border-slate-200 bg-white p-4">
+                                <div class="flex flex-col gap-4 lg:flex-row lg:items-center">
+
+                                    {% if is_completed %}
+                                        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
+                                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    stroke-width="2"
+                                                    d="M5 13l4 4L19 7"
+                                                ></path>
+                                            </svg>
+                                        </div>
+                                    {% else %}
+                                        <div class="h-11 w-11 shrink-0 rounded-full border-2 border-slate-300"></div>
+                                    {% endif %}
+
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex flex-wrap items-center gap-2">
+                                            <h3 class="text-lg font-bold {% if is_completed %}text-slate-400 line-through{% else %}text-slate-900{% endif %}">
+                                                {{ habit.name }}
+                                            </h3>
+
+                                            <span class="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
+                                                Daily
+                                            </span>
+                                        </div>
+
+                                        {% if habit.description %}
+                                            <p class="mt-1 text-sm text-slate-500">
+                                                {{ habit.description }}
+                                            </p>
+                                        {% endif %}
+
+                                        <div class="mt-3 flex items-center gap-3">
+                                            <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
+                                                <div
+                                                    class="h-full rounded-full {% if is_completed %}bg-emerald-500{% else %}bg-blue-900{% endif %}"
+                                                    style="width: {{ progress_value }}%;"
+                                                ></div>
+                                            </div>
+
+                                            <span class="w-20 text-right text-sm font-medium text-slate-400">
+                                                {% if is_completed %}
+                                                    Completed
+                                                {% else %}
+                                                    0%
+                                                {% endif %}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Future feature controls -->
+                                    <div class="flex gap-2">
+                                        <span class="cursor-not-allowed rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400">
+                                            Edit
+                                        </span>
+
+                                        <span class="cursor-not-allowed rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400">
+                                            Delete
+                                        </span>
+                                    </div>
+                                </div>
+                            </article>
+                        {% endfor %}
+                    </div>
+
+                    {% if habits|length > 3 %}
+                        <p class="mt-3 text-sm text-slate-400">
+                            Showing the 3 most recent habits. View all habits below.
+                        </p>
+                    {% endif %}
+                {% else %}
+                    <div class="rounded-xl border-2 border-dashed border-slate-300 bg-white px-6 py-10 text-center">
+                        <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-indigo-50 text-3xl">
+                            🌱
+                        </div>
+
+                        <h3 class="text-xl font-bold text-slate-900">
+                            No habits yet
+                        </h3>
+
+                        <p class="mx-auto mt-2 max-w-md text-slate-500">
+                            Create your first habit to start building a consistent daily routine.
+                        </p>
+
+                        <a
+                            href="{{ url_for('habit_tracker') }}"
+                            class="mt-6 inline-flex items-center gap-2 rounded-lg bg-blue-950 px-5 py-3 font-semibold text-white transition hover:bg-blue-900"
+                        >
+                            Create Your First Habit
+                        </a>
+                    </div>
+                {% endif %}
+            </section>
+
+            <!-- All My Habits -->
+            <section>
+                <div class="mb-4">
+                    <h2 class="text-2xl font-bold text-slate-900">
+                        All My Habits
+                    </h2>
+
+                    <p class="mt-1 text-slate-400">
+                        All currently active habits
+                    </p>
+                </div>
+
+                <div class="habit-table-card overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                    <table class="min-w-full divide-y divide-slate-200">
+                        <thead class="bg-slate-50">
+                            <tr>
+                                <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Habit
+                                </th>
+
+                                <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Frequency
+                                </th>
+
+                                <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Start Date
+                                </th>
+
+                                <th class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Status
+                                </th>
+
+                                <th class="px-5 py-4 text-right text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    Actions
+                                </th>
+                            </tr>
+                        </thead>
+
+                        <tbody class="divide-y divide-slate-100">
+                            {% if habits %}
+                                {% for habit in habits %}
+                                    <tr>
+                                        <td class="px-5 py-4">
+                                            <p class="font-semibold text-slate-900">
+                                                {{ habit.name }}
+                                            </p>
+
+                                            {% if habit.description %}
+                                                <p class="mt-1 max-w-xs truncate text-sm text-slate-400">
+                                                    {{ habit.description }}
+                                                </p>
+                                            {% endif %}
+                                        </td>
+
+                                        <td class="px-5 py-4">
+                                            <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+                                                Daily
+                                            </span>
+                                        </td>
+
+                                        <td class="whitespace-nowrap px-5 py-4 text-sm text-slate-500">
+                                            {{ habit.created_at.strftime('%B %d, %Y') }}
+                                        </td>
+
+                                        <td class="px-5 py-4">
+                                            <span class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                                                Active
+                                            </span>
+                                        </td>
+
+                                        <td class="px-5 py-4 text-right">
+                                            <div class="flex justify-end gap-2">
+                                                <span class="cursor-not-allowed rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-400">
+                                                    Edit
+                                                </span>
+
+                                                <span class="cursor-not-allowed rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-400">
+                                                    Delete
+                                                </span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="5" class="px-5 py-10 text-center text-sm text-slate-400">
+                                        No habits are available yet.
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+{% endblock %}
