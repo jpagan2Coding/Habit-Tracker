@@ -1,0 +1,22 @@
+from models import Habit
+
+
+def test_create_new_habit_saves_name_and_description(client):
+    """Submitting the new-habit form saves the habit with its name and description."""
+    response = client.post(
+        '/habit-tracker',
+        data={'name': 'Drink Water', 'description': '8 glasses a day'},
+    )
+
+    assert response.status_code == 302
+
+    habit = Habit.query.filter_by(name='Drink Water').first()
+    assert habit is not None
+    assert habit.description == '8 glasses a day'
+
+
+def test_create_new_habit_requires_a_name(client):
+    """A habit with a blank name is not saved."""
+    client.post('/habit-tracker', data={'name': '   ', 'description': 'No name'})
+
+    assert Habit.query.count() == 0
