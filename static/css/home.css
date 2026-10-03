@@ -24,6 +24,7 @@ a { color: inherit; text-decoration: none; }
 .home-frame {
     margin-top: 16px;
     margin-bottom: 22px;
+    padding: 0;
 }
 
 .home-header {
