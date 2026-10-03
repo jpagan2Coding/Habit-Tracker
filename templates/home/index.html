@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HabitBuddy | Build Better Habits</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL@0..1&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/home.css') }}">
+</head>
+<body>
+    <div class="container home-frame">
+        <header class="home-header row align-items-center">
+            <a class="home-brand col-auto" href="{{ url_for('home') }}">HabitBuddy</a>
+
+            <nav class="home-nav col d-none d-md-flex justify-content-center" aria-label="Main navigation">
+                <a href="#home">Home</a><a href="#features">Features</a><a href="#how-it-works">How it works</a><a href="#testimonials">Blog</a><a href="#about">About Us</a>
+            </nav>
+
+            <div class="home-actions col-auto d-flex">
+                <a class="button button-light button-small" href="{{ url_for('habit_dashboard') }}">Login</a>
+                <a class="button button-light button-small" href="{{ url_for('habit_dashboard') }}">Create Account</a>
+            </div>
+        </header>
+
+        <main>
+            <section class="hero row align-items-center g-5" id="home">
+                <div class="hero-copy col-12 col-md-6 text-center text-md-start">
+                    <h1>Build Better Habits, One Day at a Time</h1>
+                    <p>Track your daily routines, stay consistent, and turn goals into habits - all in one app.</p>
+                    <a class="button button-light" href="{{ url_for('habit_dashboard') }}">Get Started Free</a>
+                    <p class="trust-statement justify-content-center justify-content-md-start"><span class="material-symbols-outlined" aria-hidden="true">verified</span> Used by students and professionals</p>
+                </div>
+
+                <div class="hero-visual col-12 col-md-6" aria-label="Habit progress preview">
+                    <div class="progress-preview">
+                        <div class="preview-header">
+                            <span><span class="material-symbols-outlined" aria-hidden="true">task_alt</span> Today's progress</span>
+                            <strong>75%</strong>
+                        </div>
+                        <div class="preview-progress"><span></span></div>
+                        <div class="preview-habit"><span class="material-symbols-outlined completed-icon" aria-hidden="true">check_circle</span><span>Morning reading</span><small>Completed</small></div>
+                        <div class="preview-habit"><span class="material-symbols-outlined completed-icon" aria-hidden="true">check_circle</span><span>Drink water</span><small>Completed</small></div>
+                        <div class="preview-habit"><span class="material-symbols-outlined pending-icon" aria-hidden="true">radio_button_unchecked</span><span>Evening walk</span><small>Up next</small></div>
+                    </div>
+                    <div class="hero-badge"><span class="material-symbols-outlined" aria-hidden="true">local_fire_department</span><strong>7 day streak</strong></div>
+                </div>
+            </section>
+
+            <section class="features-section" id="features">
+                <div class="section-heading row align-items-md-center">
+                    <h2 class="col-12 col-md-12">Why you’ll love it</h2>
+                    <p class="col-12 col-md-12 mt-2">Designed to help you stay on track, effortlessly.</p>
+                </div>
+
+                <div class="row g-4">
+                    <div class="col-12 col-md-4"><article class="feature-card h-100">
+                        <span class="material-symbols-outlined feature-icon" aria-hidden="true">alarm</span><h3>Smart Reminders</h3>
+                        <p>Never miss a habit again. Set daily notifications or let the app suggest the best time.</p>
+                    </article></div>
+                    <div class="col-12 col-md-4"><article class="feature-card h-100">
+                        <span class="material-symbols-outlined feature-icon" aria-hidden="true">category</span><h3>Habit Categories</h3>
+                        <p>Organize wellness, learning, fitness, and personal goals in one clear view.</p>
+                    </article></div>
+                    <div class="col-12 col-md-4"><article class="feature-card h-100">
+                        <span class="material-symbols-outlined feature-icon" aria-hidden="true">calendar_month</span><h3>Calendar Tracking</h3>
+                        <p>See completed days and progress patterns with a simple visual heatmap.</p>
+                    </article></div>
+                    <div class="col-12 col-md-4"><article class="feature-card h-100">
+                        <span class="material-symbols-outlined feature-icon" aria-hidden="true">flag</span><h3>Custom Goals</h3>
+                        <p>Set goals that match your pace and make every small step count.</p>
+                    </article></div>
+                    <div class="col-12 col-md-4"><article class="feature-card h-100">
+                        <span class="material-symbols-outlined feature-icon" aria-hidden="true">analytics</span><h3>Completion Statistics</h3>
+                        <p>Understand your progress with weekly reports and clear completion data.</p>
+                    </article></div>
+                    <div class="col-12 col-md-4"><article class="feature-card h-100">
+                        <span class="material-symbols-outlined feature-icon" aria-hidden="true">trending_up</span><h3>Motivational Streaks</h3>
+                        <p>Stay motivated by building consistent streaks and celebrating milestones.</p>
+                    </article></div>
+                </div>
+            </section>
+
+            <section class="steps-section" id="how-it-works">
+                <div class="section-heading section-heading-stacked">
+                    <h2>How it works</h2>
+                    <p>Three simple steps to make progress feel achievable.</p>
+                </div>
+                <div class="row g-4">
+                    <div class="col-12 col-md-4"><article class="step-card"><span class="step-number">1</span><h3>Create a habit</h3><p>Choose one goal that matters and give it a clear starting point.</p></article></div>
+                    <div class="col-12 col-md-4"><article class="step-card"><span class="step-number">2</span><h3>Track your progress</h3><p>Check in each day and use your calendar to see your momentum.</p></article></div>
+                    <div class="col-12 col-md-4"><article class="step-card"><span class="step-number">3</span><h3>Build consistency</h3><p>Keep your streak alive and turn small actions into a routine.</p></article></div>
+                </div>
+            </section>
+
+            <section class="cta-section row g-4 align-items-center">
+                <h2 class="col-12 col-md-6">Start your first<br>habit today.</h2>
+                <div class="cta-copy col-12 col-md-6">
+                    <p>Start small, stay consistent, and let every completed day build confidence.</p>
+                    <a class="button button-dark" href="{{ url_for('habit_dashboard') }}">Go to Dashboard <span aria-hidden="true"> &nbsp;→</span></a>
+                </div>
+            </section>
+
+            <section class="testimonials-section" id="testimonials">
+                <div class="section-heading section-heading-stacked row">
+                    <h2 class="col-12">What our users say</h2>
+                    <p class="col-12">Real stories from people who turned their goals into habits.</p>
+                </div>
+
+                <div class="row g-4">
+                    <div class="col-12 col-md-4"><article class="testimonial-card h-100">
+                        <div class="testimonial-person"><span class="avatar avatar-sarah">S</span><span><strong>Sarah T.</strong><small>Writer · New York</small></span></div>
+                        <div class="rating" aria-label="5 out of 5 stars">★★★★★</div>
+                        <p>“I’ve finally stayed consistent with journaling for 90 days. This app made it effortless.”</p>
+                    </article></div>
+                    <div class="col-12 col-md-4"><article class="testimonial-card h-100">
+                        <div class="testimonial-person"><span class="avatar avatar-james">J</span><span><strong>James K.</strong><small>Software Engineer · Austin</small></span></div>
+                        <div class="rating" aria-label="5 out of 5 stars">★★★★★</div>
+                        <p>“Seeing my progress visually keeps me motivated every day. The reminders are just perfect!”</p>
+                    </article></div>
+                    <div class="col-12 col-md-4"><article class="testimonial-card h-100">
+                        <div class="testimonial-person"><span class="avatar avatar-priya">P</span><span><strong>Priya R.</strong><small>Wellness Coach · Seattle</small></span></div>
+                        <div class="rating" aria-label="5 out of 5 stars">★★★★★</div>
+                        <p>“I’ve tried several habit trackers, but this one is the only one I actually stuck with.”</p>
+                    </article></div>
+                    <div class="col-12 col-md-4"><article class="testimonial-card h-100"><div class="testimonial-person"><span class="avatar avatar-maya">M</span><span><strong>Maya L.</strong><small>Graduate Student · Boston</small></span></div><div class="rating" aria-label="5 out of 5 stars">★★★★★</div><p>“The simple daily check-in helps me focus on progress instead of perfection.”</p></article></div>
+                    <div class="col-12 col-md-4"><article class="testimonial-card h-100"><div class="testimonial-person"><span class="avatar avatar-daniel">D</span><span><strong>Daniel C.</strong><small>Product Designer · Chicago</small></span></div><div class="rating" aria-label="5 out of 5 stars">★★★★★</div><p>“I can finally see which routines are working and where I need a reset.”</p></article></div>
+                    <div class="col-12 col-md-4"><article class="testimonial-card h-100"><div class="testimonial-person"><span class="avatar avatar-olivia">O</span><span><strong>Olivia P.</strong><small>Teacher · Denver</small></span></div><div class="rating" aria-label="5 out of 5 stars">★★★★★</div><p>“HabitBuddy makes consistency feel calm, visible, and surprisingly rewarding.”</p></article></div>
+                </div>
+            </section>
+
+            <section class="faq-section" id="faq">
+                <div class="section-heading section-heading-stacked">
+                    <h2>Frequently asked questions</h2>
+                    <p>Everything you need to know before you begin.</p>
+                </div>
+                <div class="faq-list">
+                    <details><summary>Is Habit Tracker free?</summary><p>Yes. You can create and track your habits from the Dashboard at no cost.</p></details>
+                    <details><summary>Can I track multiple habits?</summary><p>Yes. Add as many habits as you need and review them together in your progress view.</p></details>
+                    <details><summary>How are streaks calculated?</summary><p>A streak counts consecutive days where you complete a habit.</p></details>
+                    <details><summary>Can I edit or delete habits?</summary><p>Habit editing and deletion are planned for a future sprint.</p></details>
+                    <details><summary>Is my data saved securely?</summary><p>Your habits are stored in the application database and are only used to provide your tracker experience.</p></details>
+                </div>
+            </section>
+        </main>
+
+        <footer class="home-footer" id="about">
+            <div class="footer-main row">
+                <div class="col-12">
+                    <h2>HabitBuddy</h2>
+                    <p>Track your daily routines, stay consistent, and turn goals into habits - all in one beautiful app.</p>
+                </div>
+                <nav class="footer-links col-12" aria-label="Footer navigation">
+                    <a href="#features">Features</a><a href="{{ url_for('habit_dashboard') }}">Dashboard</a><a href="mailto:hello@habitbuddy.example">Contact</a><a href="#faq">Privacy Policy</a><a href="#faq">Terms of Service</a><a href="https://github.com/jpagan2Coding/Habit-Tracker">GitHub</a>
+                </nav>
+            </div>
+            <p class="footer-copyright">© 2026 HabitBuddy All rights reserved.</p>
+        </footer>
+    </div>
+</body>
+</html>
