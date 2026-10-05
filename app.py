@@ -1,5 +1,4 @@
 from datetime import datetime
-import os
 
 from flask import Flask, render_template, request, redirect, url_for
 
@@ -84,8 +83,10 @@ def init_db():
         db.create_all()
 
 
+init_db()
+
+
 if __name__ == '__main__':
-    if not os.path.exists('app.db'):
-        init_db()
+    init_db()
 
     app.run(debug=True)
