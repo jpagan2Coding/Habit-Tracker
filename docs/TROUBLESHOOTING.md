@@ -204,17 +204,17 @@ python -c "from app import app; print(app.template_folder)"
 1. Check file path in template:
 ```html
 <!-- Correct -->
-<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/global.css') }}">
 
 <!-- Incorrect -->
-<link rel="stylesheet" href="/static/css/style.css">
+<link rel="stylesheet" href="/static/css/global.css">
 ```
 
 2. Clear browser cache (Ctrl+Shift+R or Cmd+Shift+R)
 
 3. Verify file exists:
 ```bash
-ls static/css/style.css
+ls static/css/global.css
 ```
 
 ## Form Submission Issues

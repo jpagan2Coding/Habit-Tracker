@@ -3,11 +3,7 @@
 {% block title %}Habit Tracker • Student Starter Pack{% endblock %}
 
 {% block extra_head %}
-<style>
-    .habit-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/habit-tracker.css') }}">
 {% endblock %}
 
 {% block content %}

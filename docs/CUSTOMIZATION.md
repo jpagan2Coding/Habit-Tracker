@@ -85,7 +85,11 @@ Modify these CSS variables to change the color scheme.
 
 ### Global Styles
 
-Edit `static/css/style.css` for global styling that affects all modules.
+Edit `static/css/global.css` for shared styling that affects all pages. Put colors,
+fonts, spacing, shadows, and other design tokens in `static/css/theme.css`.
+
+For page-specific styling, add a stylesheet such as `static/css/dashboard.css`
+and load it from that page's `{% block extra_head %}`.
 
 ### Custom CSS Classes
 
