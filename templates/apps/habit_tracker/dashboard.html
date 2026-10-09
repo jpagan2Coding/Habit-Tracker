@@ -3,60 +3,7 @@
 {% block title %}Dashboard | Habit Tracker{% endblock %}
 
 {% block extra_head %}
-<style>
-    .dashboard-shell {
-        margin: -2rem -1rem;
-        height: calc(100vh - 64px);
-        overflow: hidden;
-        background: #f5f7fb;
-    }
-
-    .dashboard-content-scroll {
-        height: 100%;
-        overflow-y: auto;
-        scrollbar-width: thin;
-        scrollbar-color: #cbd5e1 transparent;
-    }
-
-    .dashboard-content-scroll::-webkit-scrollbar {
-        width: 8px;
-    }
-
-    .dashboard-content-scroll::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    .dashboard-content-scroll::-webkit-scrollbar-thumb {
-        border-radius: 9999px;
-        background: #cbd5e1;
-    }
-
-    .dashboard-content-scroll::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8;
-    }
-
-    .sidebar-link {
-        transition: background-color 0.2s ease, color 0.2s ease;
-    }
-
-    .summary-card,
-    .habit-row,
-    .habit-table-card {
-        box-shadow: 0 2px 7px rgba(15, 23, 42, 0.08);
-    }
-
-    @media (min-width: 640px) {
-        .dashboard-shell {
-            margin: -2rem -1.5rem;
-        }
-    }
-
-    @media (min-width: 1024px) {
-        .dashboard-shell {
-            margin: -2rem;
-        }
-    }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/habit-tracker.css') }}">
 {% endblock %}
 
 {% block content %}
