@@ -1,7 +1,7 @@
 from datetime import datetime
 import os
 
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, redirect, url_for, session
 
 from extensions import db
 
@@ -78,6 +78,11 @@ def habit_dashboard():
         current_streak=None,
         today=today,
     )
+
+@app.route('/logout', methods=['POST'])
+def logout():
+    session.clear()
+    return redirect(url_for('home')) # change to login once implemented
 
 def init_db():
     with app.app_context():

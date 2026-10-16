@@ -1,3 +1,4 @@
+
 from app import app
 
 
@@ -9,13 +10,24 @@ def test_logout():
         with client.session_transaction() as session:
             session["user_id"] = 1
 
-        # Attempt to log out
-        response = client.get("/logout")
+        # Log out
+        response = client.post("/logout")
 
-        # Check redirect to login page
+        # Check redirect to home page
         assert response.status_code == 302
-        assert "/login" in response.location
+        assert response.location.endswith("/")
 
-        # Check that the user session is cleared
+        # Check that the user session was cleared
         with client.session_transaction() as session:
             assert "user_id" not in session
+
+
+def test_logout_without_login():
+    app.config["TESTING"] = True
+
+    with app.test_client() as client:
+        response = client.post("/logout")
+
+        # Logging out without a session should not crash
+        assert response.status_code == 302
+
