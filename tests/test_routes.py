@@ -12,6 +12,35 @@ def test_habit_tracker_get_returns_ok(client):
     assert response.status_code == 200
 
 
+def test_login_get_returns_ok(client):
+    """Test that the login page renders successfully."""
+    response = client.get('/login')
+
+    assert response.status_code == 200
+    assert b'Log in to HabitBuddy' in response.data
+    assert b'Email address' in response.data
+
+
+def test_login_requires_both_fields(client):
+    """Test that an incomplete login shows a helpful validation message."""
+    response = client.post('/login', data={'email': '', 'password': ''})
+
+    assert response.status_code == 200
+    assert b'Enter both your email and password' in response.data
+
+
+def test_login_redirects_to_dashboard_with_credentials(client):
+    """Test the temporary demo login flow."""
+    response = client.post(
+        '/login',
+        data={'email': 'person@example.com', 'password': 'password'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['Location'].endswith('/dashboard')
+
+
 def test_habit_tracker_post_creates_habit(client):
     """Test that POST /habit-tracker creates a new habit in the database."""
     habit_data = {
