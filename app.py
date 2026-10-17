@@ -1,5 +1,4 @@
 from datetime import datetime
-import os
 
 from flask import Flask, render_template, request, redirect, url_for, session
 
@@ -19,6 +18,31 @@ from models import Habit  # noqa: E402
 @app.route('/')
 def home():
     return render_template('home/index.html', page_id='home')
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Render the login screen and provide demo access to the tracker."""
+    error = None
+    email = ''
+
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        password = request.form.get('password', '')
+
+        if not email or not password:
+            error = 'Enter both your email and password to continue.'
+        else:
+            # TODO: Implement proper auth here
+            session['user_email'] = email
+            return redirect(url_for('habit_dashboard'))
+
+    return render_template(
+        'auth/login.html',
+        page_id='login',
+        error=error,
+        email=email,
+    )
 
 
 @app.route('/habit-tracker', methods=['GET', 'POST'])
@@ -89,8 +113,10 @@ def init_db():
         db.create_all()
 
 
+init_db()
+
+
 if __name__ == '__main__':
-    if not os.path.exists('app.db'):
-        init_db()
+    init_db()
 
     app.run(debug=True)

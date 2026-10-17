@@ -87,7 +87,9 @@ templates/          # Jinja2 templates
 └── apps/           # Module-specific templates
 static/             # Static assets
 └── css/
-    └── style.css   # Global styles
+    ├── theme.css   # Shared design tokens
+    ├── global.css  # Shared global styles
+    └── page.css    # Page-specific stylesheets
 ```
 
 ### Separation of Concerns
