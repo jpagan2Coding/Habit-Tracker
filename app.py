@@ -103,6 +103,11 @@ def habit_dashboard():
         today=today,
     )
 
+@app.route('/logout', methods=['POST'])
+def logout():
+    session.clear()
+    return redirect(url_for('home')) # change to login once implemented
+
 def init_db():
     with app.app_context():
         db.create_all()
