@@ -46,6 +46,8 @@ def test_habit_tracker_post_creates_habit(client):
     habit_data = {
         'name': 'Read 20 pages',
         'description': 'Daily reading goal',
+        'target': '1',
+        'frequency': 'daily',
     }
 
     response = client.post(
