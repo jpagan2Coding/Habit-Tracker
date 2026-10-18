@@ -66,6 +66,7 @@ def test_habit_tracker_post_creates_habit(client):
 
 # === Dashboard Tests ===
 
+
 def test_dashboard_get_returns_ok(client):
     """Test that GET /dashboard returns a 200 status code."""
     response = client.get('/dashboard')
@@ -75,6 +76,32 @@ def test_dashboard_get_returns_ok(client):
     assert b"Today's Habits" in response.data
     assert b'Total Habits' in response.data
     assert b'All My Habits' in response.data
+
+
+def test_dashboard_displays_date_and_welcome(client):
+    """Dashboard displays the supplied date and welcome message."""
+    from flask import template_rendered
+
+    captured_contexts = []
+
+    def record_template(sender, template, context, **extra):
+        if template.name == 'apps/habit_tracker/dashboard.html':
+            captured_contexts.append(context)
+
+    with template_rendered.connected_to(
+        record_template,
+        client.application,
+    ):
+        response = client.get('/dashboard')
+
+    assert response.status_code == 200
+    assert len(captured_contexts) == 1
+
+    today = captured_contexts[0]['today']
+
+    assert today
+    assert f'Today: {today}'.encode() in response.data
+    assert b'Welcome back!' in response.data
 
 
 # === Parametrized Tests ===
