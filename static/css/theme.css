@@ -1,0 +1,42 @@
+:root {
+    --font-family-body: 'DM Sans', Arial, sans-serif;
+    --font-family-display: 'DM Sans', Arial, sans-serif;
+    --font-family-mono: 'Space Mono', monospace;
+
+    --color-navy: #10265b;
+    --color-light-blue: #dceefa;
+    --color-teal: #3b8c74;
+    --color-dark-teal: #2f735f;
+    --color-gold: #d58b24;
+
+    --color-text-primary: #111827;
+    --color-text-secondary: #5d6470;
+    --color-text-muted: #8a9298;
+    --color-background: #ffffff;
+    --color-background-soft: #f7f7f7;
+    --color-border: #dfe3e9;
+    --color-page-background: #f5f7fb;
+
+    --border-radius-small: 8px;
+    --border-radius-medium: 16px;
+    --border-radius-large: 22px;
+    --border-radius-pill: 999px;
+
+    --shadow-small: 0 2px 7px rgba(15, 23, 42, 0.08);
+    --shadow-medium: 0 10px 30px rgba(15, 23, 42, 0.10);
+    --shadow-large: 0 20px 50px rgba(15, 23, 42, 0.16);
+
+    --layout-content-width: 1200px;
+    --transition-fast: 160ms ease;
+    --transition-standard: 240ms ease;
+}
+
+[data-theme='dark'] {
+    --color-text-primary: #f8fafc;
+    --color-text-secondary: #cbd5e1;
+    --color-text-muted: #94a3b8;
+    --color-background: #172033;
+    --color-background-soft: #202b3d;
+    --color-border: #334155;
+    --color-page-background: #0f172a;
+}
