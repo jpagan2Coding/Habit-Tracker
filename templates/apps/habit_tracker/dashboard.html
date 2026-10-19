@@ -202,7 +202,7 @@
                 {% if habits %}
                 <div class="space-y-3">
                     {% for habit in habits %}
-                    {% set is_completed = habit.completed_dates and today in habit.completed_dates.split(',') %}
+                    {% set is_completed = completion_by_id[habit.id] %}
 
 
                     <article class="habit-row rounded-xl border border-slate-200 bg-white p-4">
