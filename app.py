@@ -92,15 +92,16 @@ def habit_dashboard():
 
     today = datetime.utcnow().date().isoformat()
 
-    completed_today = sum(
-        1
-        for habit in habits
-        if habit.completed_dates
-        and today in [
+    completion_by_id = {
+        habit.id: today in {
             date_value.strip()
-            for date_value in habit.completed_dates.split(',')
-        ]
-    )
+            for date_value in (habit.completed_dates or '').split(',')
+            if date_value.strip()
+        }
+        for habit in habits
+    }
+
+    completed_today = sum(completion_by_id.values())
 
     total_habits = len(habits)
     scheduled_today = total_habits
@@ -115,6 +116,7 @@ def habit_dashboard():
         'apps/habit_tracker/dashboard.html',
         page_id='dashboard',
         habits=habits,
+        completion_by_id=completion_by_id,
         total_habits=total_habits,
         completed_today=completed_today,
         scheduled_today=scheduled_today,
