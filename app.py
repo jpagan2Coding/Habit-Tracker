@@ -32,7 +32,7 @@ def login():
     email = ''
 
     if request.method == 'POST':
-        email = request.form.get('email', '').strip()
+        email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
 
         if not email or not password:
@@ -55,22 +55,13 @@ def login():
 
                 client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
                 database = client[database_name]
-                user = database['users'].find_one(
-                    {
-                        '$or': [
-                            {'username': email},
-                            {'email': email.lower()},
-                        ]
-                    }
-                )
+                user = database['users'].find_one({'email': email})
             except (OSError, PyMongoError, RuntimeError):
                 user = None
 
-            password_hash = user.get('password_hash') if user else None
-            if user and password_hash and check_password_hash(password_hash, password):
-                session['user_id'] = str(user.get('_id', user.get('id', '')))
-                session['username'] = user.get('username', email)
-                session['user_email'] = user.get('email', email)
+            stored_password = user.get('password', '') if user else ''
+            if user and check_password_hash(stored_password, password):
+                session['user_email'] = email
                 return redirect(url_for('habit_dashboard'))
 
             error = 'Invalid email or password.'
