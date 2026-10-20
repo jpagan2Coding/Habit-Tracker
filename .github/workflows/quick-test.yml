@@ -12,7 +12,7 @@ jobs:
     env:
       APP_ENV: test
       MONGODB_URI: mongodb://mocked-ci-only
-      MONGODB_DATABASE: habit_tracker_test
+      MONGODB_DATABASE: Habit-Tracker_test
 
     steps:
     - name: Checkout code

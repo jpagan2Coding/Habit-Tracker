@@ -1,12 +1,16 @@
 import os
 from datetime import datetime
+from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, session
+from dotenv import load_dotenv
+from flask import Flask, redirect, render_template, request, session, url_for
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from werkzeug.security import check_password_hash
 
 from models import FREQUENCY_CHOICES
+
+load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "dev-secret-key-change-in-production"
@@ -17,7 +21,7 @@ def get_db():
         raise RuntimeError("MONGODB_URI is not configured")
 
     client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
-    return client[os.getenv("MONGODB_DATABASE", "habit_tracker")]
+    return client[os.getenv("MONGODB_DATABASE", "Habit-Tracker")]
 
 
 @app.route("/")
@@ -40,7 +44,7 @@ def login():
         else:
             try:
                 mongo_uri = os.getenv("MONGODB_URI")
-                database_name = os.getenv("MONGODB_DATABASE", "habit_tracker")
+                database_name = os.getenv("MONGODB_DATABASE", "Habit-Tracker")
                 if not mongo_uri:
                     raise RuntimeError("MONGODB_URI is not configured")
 

@@ -19,7 +19,7 @@ def mongo_client(monkeypatch):
     Provide an in-memory MongoDB replacement for authentication tests.
     """
     client = mongomock.MongoClient()
-    database = client["habit_tracker_test"]
+    database = client["Habit-Tracker_test"]
     database["users"].insert_one(
         {
             "email": "person@example.com",
@@ -29,7 +29,7 @@ def mongo_client(monkeypatch):
 
     monkeypatch.setattr("app.MongoClient", lambda *args, **kwargs: client)
     monkeypatch.setenv("MONGODB_URI", "mongodb://mocked-ci-only")
-    monkeypatch.setenv("MONGODB_DATABASE", "habit_tracker_test")
+    monkeypatch.setenv("MONGODB_DATABASE", "Habit-Tracker_test")
     return client
 
 
@@ -47,7 +47,7 @@ def habits(mongo_client):
     """
     The habits collection in the in-memory test database.
     """
-    return mongo_client["habit_tracker_test"]["habits"]
+    return mongo_client["Habit-Tracker_test"]["habits"]
 
 @pytest.fixture
 def client(app):
