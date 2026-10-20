@@ -1,6 +1,5 @@
 import pytest
 
-from models import Habit
 
 # === Habit Tracker Tests ===
 
@@ -11,7 +10,7 @@ def test_habit_tracker_get_returns_ok(client):
     assert response.status_code == 200
 
 
-def test_habit_tracker_post_creates_habit(client):
+def test_habit_tracker_post_creates_habit(client, habits):
     """Test that POST /habit-tracker creates a new habit in the database."""
     habit_data = {
         'name': 'Read 20 pages',
@@ -28,10 +27,10 @@ def test_habit_tracker_post_creates_habit(client):
 
     assert response.status_code == 302
 
-    stored = Habit.query.filter_by(name='Read 20 pages').first()
+    stored = habits.find_one({'name': 'Read 20 pages'})
 
     assert stored is not None
-    assert stored.description == 'Daily reading goal'
+    assert stored['description'] == 'Daily reading goal'
 
 
 # === Dashboard Tests ===
