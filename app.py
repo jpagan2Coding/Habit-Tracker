@@ -10,7 +10,8 @@ except ImportError:
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
-from sqlalchemy import inspect, text
+from sqlalchemy import event, inspect, text
+from sqlalchemy.engine import Engine
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from extensions import db
@@ -19,6 +20,25 @@ app = Flask(__name__)
 app.config["SECRET_KEY"] = "dev-secret-key-change-in-production"
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "connect_args": {
+        "timeout": 30,
+        "check_same_thread": False,
+    }
+}
+
+
+@event.listens_for(Engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    """Enable WAL mode and busy timeout to avoid SQLite OperationalError (database locked)."""
+    try:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.close()
+    except Exception:
+        pass
+
 
 db.init_app(app)
 
@@ -121,15 +141,20 @@ def habit_tracker():
             errors.append("Choose a frequency.")
 
         if not errors:
-            habit = Habit(
-                name=form["name"],
-                description=form["description"] or None,
-                target=target,
-                frequency=form["frequency"],
-            )
-            db.session.add(habit)
-            db.session.commit()
-            return redirect(url_for("habit_dashboard"))
+            try:
+                habit = Habit(
+                    name=form["name"],
+                    description=form["description"] or None,
+                    target=target,
+                    frequency=form["frequency"],
+                )
+                db.session.add(habit)
+                db.session.commit()
+                return redirect(url_for("habit_dashboard"))
+            except Exception as e:
+                db.session.rollback()
+                app.logger.error(f"Error creating habit: {e}")
+                errors.append("A database error occurred. Please try again.")
 
     return (
         render_template(
@@ -145,7 +170,11 @@ def habit_tracker():
 
 @app.route("/dashboard")
 def habit_dashboard():
-    habits = Habit.query.order_by(Habit.created_at.desc()).all()
+    try:
+        habits = Habit.query.order_by(Habit.created_at.desc()).all()
+    except Exception as e:
+        app.logger.error(f"Error loading dashboard habits: {e}")
+        habits = []
 
     today = datetime.utcnow().date().isoformat()
 
@@ -247,41 +276,50 @@ def register():
     return render_template("auth/register.html")
 
 
-@app.route("/logout", methods=["POST"])
+@app.route("/logout", methods=["GET", "POST"])
 def logout():
     session.clear()
-    return redirect(url_for("home"))  # change to login once implemented
+    return redirect(url_for("home"))
 
 
 def init_db():
     with app.app_context():
-        db.create_all()
-        _migrate_habit_table()
+        try:
+            db.create_all()
+            _migrate_habit_table()
+        except Exception as e:
+            app.logger.warning(f"Database initialization warning: {e}")
 
 
 def _migrate_habit_table():
     """Add habit columns introduced after an existing database was created."""
-    columns = {
-        column['name']
-        for column in inspect(db.engine).get_columns('habit')
-    }
-    missing_columns = {
-        'target': 'INTEGER',
-        'frequency': 'VARCHAR(20)',
-    }
+    try:
+        inspector = inspect(db.engine)
+        if not inspector.has_table("habit"):
+            return
 
-    with db.engine.begin() as connection:
-        for name, column_type in missing_columns.items():
-            if name not in columns:
-                connection.execute(
-                    text(f'ALTER TABLE habit ADD COLUMN {name} {column_type}')
-                )
+        columns = {column["name"] for column in inspector.get_columns("habit")}
+        missing_columns = {
+            "target": "INTEGER",
+            "frequency": "VARCHAR(20)",
+            "user_id": "INTEGER",
+            "completed_dates": "TEXT",
+            "created_at": "DATETIME",
+            "description": "TEXT",
+        }
+
+        with db.engine.begin() as connection:
+            for name, column_type in missing_columns.items():
+                if name not in columns:
+                    connection.execute(
+                        text(f"ALTER TABLE habit ADD COLUMN {name} {column_type}")
+                    )
+    except Exception as e:
+        app.logger.warning(f"Habit table migration notice: {e}")
 
 
 init_db()
 
 
 if __name__ == "__main__":
-    init_db()
-
     app.run(debug=True)
