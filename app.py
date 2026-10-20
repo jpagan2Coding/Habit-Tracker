@@ -2,21 +2,22 @@ import os
 from datetime import datetime
 
 from flask import Flask, render_template, request, redirect, url_for, session
-from sqlalchemy import inspect, text
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from werkzeug.security import check_password_hash
 
-from extensions import db
+from models import FREQUENCY_CHOICES
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "dev-secret-key-change-in-production"
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+def get_db():
+    """Connect to the team's MongoDB database using MONGODB_URI."""
+    mongo_uri = os.getenv("MONGODB_URI")
+    if not mongo_uri:
+        raise RuntimeError("MONGODB_URI is not configured")
 
-db.init_app(app)
-
-from models import FREQUENCY_CHOICES, Habit  # noqa: E402
+    client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+    return client[os.getenv("MONGODB_DATABASE", "habit_tracker")]
 
 
 @app.route("/")
@@ -87,14 +88,17 @@ def habit_tracker():
             errors.append("Choose a frequency.")
 
         if not errors:
-            habit = Habit(
-                name=form["name"],
-                description=form["description"] or None,
-                target=target,
-                frequency=form["frequency"],
+            get_db()["habits"].insert_one(
+                {
+                    "name": form["name"],
+                    "description": form["description"] or None,
+                    "target": target,
+                    "frequency": form["frequency"],
+                    "user_email": session.get("user_email"),
+                    "created_at": datetime.utcnow(),
+                    "completed_dates": [],
+                }
             )
-            db.session.add(habit)
-            db.session.commit()
             return redirect(url_for("habit_dashboard"))
 
     return render_template(
@@ -108,17 +112,18 @@ def habit_tracker():
 
 @app.route("/dashboard")
 def habit_dashboard():
-    habits = Habit.query.order_by(Habit.created_at.desc()).all()
+    habits = list(
+        get_db()["habits"]
+        .find({"user_email": session.get("user_email")})
+        .sort("created_at", -1)
+    )
+    for habit in habits:
+        habit["id"] = str(habit["_id"])
 
     today = datetime.utcnow().date().isoformat()
 
     completion_by_id = {
-        habit.id: today
-        in {
-            date_value.strip()
-            for date_value in (habit.completed_dates or "").split(",")
-            if date_value.strip()
-        }
+        habit["id"]: today in habit.get("completed_dates", [])
         for habit in habits
     }
 
@@ -151,35 +156,5 @@ def logout():
     return redirect(url_for("home"))  # change to login once implemented
 
 
-def init_db():
-    with app.app_context():
-        db.create_all()
-        _migrate_habit_table()
-
-
-def _migrate_habit_table():
-    """Add habit columns introduced after an existing database was created."""
-    columns = {
-        column['name']
-        for column in inspect(db.engine).get_columns('habit')
-    }
-    missing_columns = {
-        'target': 'INTEGER',
-        'frequency': 'VARCHAR(20)',
-    }
-
-    with db.engine.begin() as connection:
-        for name, column_type in missing_columns.items():
-            if name not in columns:
-                connection.execute(
-                    text(f'ALTER TABLE habit ADD COLUMN {name} {column_type}')
-                )
-
-
-init_db()
-
-
 if __name__ == "__main__":
-    init_db()
-
     app.run(debug=True)

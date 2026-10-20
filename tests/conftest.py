@@ -11,12 +11,13 @@ import pytest
 from werkzeug.security import generate_password_hash
 
 from app import app as flask_app
-from extensions import db
 
 
 @pytest.fixture
 def mongo_client(monkeypatch):
-    """Provide an in-memory MongoDB replacement for authentication tests."""
+    """
+    Provide an in-memory MongoDB replacement for authentication tests.
+    """
     client = mongomock.MongoClient()
     database = client["habit_tracker_test"]
     database["users"].insert_one(
@@ -33,34 +34,20 @@ def mongo_client(monkeypatch):
 
 
 @pytest.fixture
-def app(tmp_path, mongo_client):
+def app(mongo_client):
     """
-    Create and configure a Flask application instance for testing.
-
-    Uses a temporary SQLite database that is created fresh for each test
-    and cleaned up after the test completes.
-
-    Args:
-        tmp_path: pytest fixture providing a temporary directory path
-
-    Yields:
-        Flask application configured for testing
+    Flask app configured for testing, backed by the in-memory MongoDB.
     """
-    db_path = tmp_path / "test.db"
-    flask_app.config.update(
-        TESTING=True,
-        SQLALCHEMY_DATABASE_URI=f"sqlite:///{db_path}",
-        SQLALCHEMY_ENGINE_OPTIONS={"connect_args": {"check_same_thread": False}},
-    )
+    flask_app.config.update(TESTING=True)
+    yield flask_app
 
-    with flask_app.app_context():
-        db.session.remove()
-        db.drop_all()
-        db.create_all()
-        yield flask_app
-        db.session.remove()
-        db.drop_all()
 
+@pytest.fixture
+def habits(mongo_client):
+    """
+    The habits collection in the in-memory test database.
+    """
+    return mongo_client["habit_tracker_test"]["habits"]
 
 @pytest.fixture
 def client(app):
