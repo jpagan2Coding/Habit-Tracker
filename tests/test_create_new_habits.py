@@ -36,11 +36,13 @@ def test_missing_name_does_not_create_habit(client):
     assert Habit.query.count() == 0
 
 
+
 def test_missing_target_does_not_create_habit(client):
     response = client.post('/habit-tracker', data={**VALID_HABIT, 'target': ''})
 
     assert response.status_code == 400
     assert Habit.query.count() == 0
+
 
 
 def test_missing_frequency_does_not_create_habit(client):
