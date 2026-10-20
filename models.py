@@ -2,11 +2,7 @@ from datetime import datetime
 
 from extensions import db
 
-FREQUENCY_CHOICES = ("daily", "weekly", "monthly")
-
-
-# User accounts are stored in MongoDB (see docs/DATABASE.md), not in SQLAlchemy.
-# Only habit data lives in the SQLite database managed by these models.
+FREQUENCY_CHOICES = ('daily', 'weekly', 'monthly')
 
 
 class Habit(db.Model):

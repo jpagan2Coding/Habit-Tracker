@@ -28,19 +28,6 @@ uv run python app.py
 
 Then open [http://localhost:5000](http://localhost:5000).
 
-### Configuration
-
-Habits are stored in a local SQLite file (`instance/app.db`, created automatically).
-User accounts are stored in MongoDB Atlas. To make login and registration work,
-copy `.env.example` to `.env` and fill in the team's Atlas connection string:
-
-```bash
-cp .env.example .env
-```
-
-`.env` is gitignored. See [docs/DATABASE.md](docs/DATABASE.md) for the account
-document shape and indexes.
-
 ## Running Tests
 
 ```bash

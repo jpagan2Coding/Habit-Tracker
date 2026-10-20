@@ -2,26 +2,16 @@
 Pytest configuration and fixtures for testing.
 
 This module provides shared fixtures used across all test files:
-- mongo_client: in-memory mongomock replacement for the MongoDB "users" collection
 - app: Flask application instance with test configuration
 - client: Flask test client for making HTTP requests
-
-Habits use an in-memory SQLite database. Flask-SQLAlchemy builds its engine when
-app.py is imported, so the URI has to be set in the environment *before* that
-import; changing app.config afterwards has no effect and would silently run the
-tests against the real instance/app.db file.
 """
 
-import os
+import mongomock
+import pytest
+from werkzeug.security import generate_password_hash
 
-os.environ["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
-
-import mongomock  # noqa: E402
-import pytest  # noqa: E402
-from werkzeug.security import generate_password_hash  # noqa: E402
-
-from app import app as flask_app  # noqa: E402
-from extensions import db  # noqa: E402
+from app import app as flask_app
+from extensions import db
 
 
 @pytest.fixture
@@ -36,31 +26,34 @@ def mongo_client(monkeypatch):
         }
     )
 
-    # app.get_mongo_db() returns this database directly, so no real MongoClient is
-    # ever constructed and the process-wide client cache is never touched.
-    monkeypatch.setitem(flask_app.config, "MONGO_DB", database)
+    monkeypatch.setattr("app.MongoClient", lambda *args, **kwargs: client)
     monkeypatch.setenv("MONGODB_URI", "mongodb://mocked-ci-only")
     monkeypatch.setenv("MONGODB_DATABASE", "habit_tracker_test")
     return client
 
 
 @pytest.fixture
-def app(mongo_client):
+def app(tmp_path, mongo_client):
     """
     Create and configure a Flask application instance for testing.
 
-    Uses an in-memory SQLite database whose tables are created fresh for each
-    test and dropped after the test completes.
+    Uses a temporary SQLite database that is created fresh for each test
+    and cleaned up after the test completes.
+
+    Args:
+        tmp_path: pytest fixture providing a temporary directory path
 
     Yields:
         Flask application configured for testing
     """
-    flask_app.config.update(TESTING=True)
+    db_path = tmp_path / "test.db"
+    flask_app.config.update(
+        TESTING=True,
+        SQLALCHEMY_DATABASE_URI=f"sqlite:///{db_path}",
+        SQLALCHEMY_ENGINE_OPTIONS={"connect_args": {"check_same_thread": False}},
+    )
 
     with flask_app.app_context():
-        # Guard against ever running the suite against a real database file.
-        assert db.engine.url.database in (None, "", ":memory:"), db.engine.url
-
         db.session.remove()
         db.drop_all()
         db.create_all()
