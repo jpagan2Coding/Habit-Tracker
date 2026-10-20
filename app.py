@@ -39,7 +39,7 @@ def login():
         else:
             try:
                 mongo_uri = os.getenv("MONGODB_URI")
-                database_name = os.getenv("MONGODB_DATABASE", "habit_tracker")
+                database_name = os.getenv("MONGODB_DATABASE", "Habit-Tracker")
                 if not mongo_uri:
                     raise RuntimeError("MONGODB_URI is not configured")
 
