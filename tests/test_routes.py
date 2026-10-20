@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 from werkzeug.security import check_password_hash
 
@@ -121,6 +123,8 @@ def test_all_pages_get_returns_ok(client, endpoint):
 
 
 # === Registration Tests ===
+
+
 def test_register_get_returns_ok(client):
     response = client.get("/register")
     assert response.status_code == 200
@@ -130,19 +134,61 @@ def test_register_get_returns_ok(client):
 def test_register_post_creates_user(client, mongo_client):
     data = {
         "username": "newuser",
-        "email": "newuser@example.com",
+        "email": "NewUser@Example.com",
         "password": "password123",
         "confirm_password": "password123",
     }
     response = client.post("/register", data=data, follow_redirects=True)
     assert response.status_code == 200
+    assert response.request.path == "/dashboard"
+    assert b"Registration successful" in response.data
 
     database = mongo_client["habit_tracker_test"]
     user = database["users"].find_one({"username": "newuser"})
     assert user is not None
+    # Stored the way the login route reads it: lowercase email, hash under "password".
     assert user["email"] == "newuser@example.com"
     assert check_password_hash(user["password"], "password123")
-    assert check_password_hash(user["password_hash"], "password123")
+    assert "password_hash" not in user
+    assert isinstance(user["created_at"], datetime)
+
+    with client.session_transaction() as sess:
+        assert sess["user_id"] == str(user["_id"])
+        assert sess["username"] == "newuser"
+        assert sess["user_email"] == "newuser@example.com"
+
+
+def test_registered_user_can_log_in(client, mongo_client):
+    data = {
+        "username": "loginlater",
+        "email": "loginlater@example.com",
+        "password": "password123",
+        "confirm_password": "password123",
+    }
+    assert client.post("/register", data=data).status_code == 302
+    client.post("/logout")
+
+    response = client.post(
+        "/login",
+        data={"email": "loginlater@example.com", "password": "password123"},
+    )
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/dashboard")
+
+
+def test_register_creates_unique_indexes(client, mongo_client):
+    data = {
+        "username": "indexed",
+        "email": "indexed@example.com",
+        "password": "password123",
+        "confirm_password": "password123",
+    }
+    client.post("/register", data=data)
+
+    indexes = mongo_client["habit_tracker_test"]["users"].index_information()
+    assert indexes["email_unique"]["unique"] is True
+    assert indexes["username_unique"]["unique"] is True
+    assert indexes["username_unique"]["sparse"] is True
 
 
 def test_register_post_rejects_mismatched_passwords(client, mongo_client):
@@ -158,6 +204,19 @@ def test_register_post_rejects_mismatched_passwords(client, mongo_client):
 
     database = mongo_client["habit_tracker_test"]
     assert database["users"].find_one({"username": "mismatch"}) is None
+
+
+def test_register_post_rejects_short_password(client, mongo_client):
+    data = {
+        "username": "shorty",
+        "email": "shorty@example.com",
+        "password": "short",
+        "confirm_password": "short",
+    }
+    response = client.post("/register", data=data)
+    assert response.status_code == 200
+    assert b"at least 8 characters" in response.data
+    assert mongo_client["habit_tracker_test"]["users"].find_one({"username": "shorty"}) is None
 
 
 def test_register_post_rejects_duplicate_username(client, mongo_client):
@@ -187,13 +246,66 @@ def test_register_post_rejects_duplicate_email(client, mongo_client):
     })
     data = {
         "username": "anotheruser",
-        "email": "duplicate@example.com",
+        "email": "Duplicate@Example.com",
         "password": "password123",
         "confirm_password": "password123",
     }
     response = client.post("/register", data=data)
     assert response.status_code == 200
     assert b"Email is already registered" in response.data
+    assert database["users"].count_documents({"email": "duplicate@example.com"}) == 1
+
+
+def test_register_handles_duplicate_created_between_check_and_insert(
+    client, mongo_client, monkeypatch
+):
+    """A concurrent registration that wins the race is caught by the unique index."""
+    import app as app_module
+
+    database = mongo_client["habit_tracker_test"]
+    app_module.ensure_user_indexes(database["users"])
+    real_hash = app_module.generate_password_hash
+
+    def hash_after_competitor_registers(password):
+        database["users"].insert_one({
+            "username": "competitor",
+            "email": "race@example.com",
+            "password": "hashedpassword",
+        })
+        return real_hash(password)
+
+    monkeypatch.setattr(app_module, "generate_password_hash", hash_after_competitor_registers)
+
+    data = {
+        "username": "racer",
+        "email": "race@example.com",
+        "password": "password123",
+        "confirm_password": "password123",
+    }
+    response = client.post("/register", data=data)
+    assert response.status_code == 200
+    assert b"Email is already registered" in response.data
+    assert database["users"].count_documents({"email": "race@example.com"}) == 1
+    with client.session_transaction() as sess:
+        assert "user_id" not in sess
+
+
+def test_register_without_database_shows_error(client, monkeypatch):
+    import app as app_module
+
+    monkeypatch.setitem(app_module.app.config, "MONGO_DB", None)
+    monkeypatch.setattr(app_module, "_load_env_files", lambda: None)
+    monkeypatch.delenv("MONGODB_URI", raising=False)
+
+    data = {
+        "username": "nodb",
+        "email": "nodb@example.com",
+        "password": "password123",
+        "confirm_password": "password123",
+    }
+    response = client.post("/register", data=data)
+    assert response.status_code == 200
+    assert b"Database connection error" in response.data
 
 
 def test_register_redirects_if_already_logged_in(client):

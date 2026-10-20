@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from models import Habit, User
+from models import Habit
 
 # === Habit Model Tests ===
 
@@ -39,14 +39,3 @@ def test_habit_completed_dates_can_store_text(app):
     )
 
     assert habit.completed_dates == "2026-10-01,2026-10-02"
-
-
-def test_user_creation_and_password_hashing(app):
-    user = User(username="johndoe", email="john@example.com")
-    user.set_password("supersecret123")
-
-    assert user.username == "johndoe"
-    assert user.email == "john@example.com"
-    assert user.password_hash != "supersecret123"
-    assert user.check_password("supersecret123") is True
-    assert user.check_password("wrongpassword") is False

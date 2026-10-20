@@ -1,15 +1,17 @@
 import os
+import sqlite3
+import threading
 from datetime import datetime
 from pathlib import Path
 
 try:
     import certifi
-except ImportError:
+except ImportError:  # pragma: no cover - certifi is a declared dependency
     certifi = None
 
 from flask import Flask, flash, redirect, render_template, request, session, url_for
-from pymongo import MongoClient
-from pymongo.errors import PyMongoError
+from pymongo import ASCENDING, MongoClient
+from pymongo.errors import DuplicateKeyError, PyMongoError
 from sqlalchemy import event, inspect, text
 from sqlalchemy.engine import Engine
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -18,7 +20,11 @@ from extensions import db
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "dev-secret-key-change-in-production"
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///app.db"
+
+# Habits live in SQLite through SQLAlchemy. The URI can be overridden through the
+# environment so the test suite can point at an in-memory database instead of the
+# real instance/app.db file.
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("SQLALCHEMY_DATABASE_URI", "sqlite:///app.db")
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "connect_args": {
@@ -31,48 +37,112 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 @event.listens_for(Engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
     """Enable WAL mode and busy timeout to avoid SQLite OperationalError (database locked)."""
+    if not isinstance(dbapi_connection, sqlite3.Connection):
+        return
     try:
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA busy_timeout=30000")
         cursor.close()
-    except Exception:
-        pass
+    except sqlite3.Error as e:
+        app.logger.warning(f"Could not apply SQLite pragmas: {e}")
 
 
 db.init_app(app)
 
 from models import FREQUENCY_CHOICES, Habit  # noqa: E402
 
+# ---------------------------------------------------------------------------
+# User accounts live in MongoDB Atlas (see docs/DATABASE.md). One MongoClient is
+# shared per process, as pymongo recommends; creating a client per request leaks
+# connection pools and monitor threads.
+# ---------------------------------------------------------------------------
+
+USERS_COLLECTION = "users"
+ENV_FILES = ("atlas-credentials.env", ".env")
+
+_mongo_lock = threading.Lock()
+_mongo_client = None
+_mongo_client_uri = None
+_env_files_loaded = False
+
+
+def _load_env_files():
+    """Load MONGODB_* settings from a local env file without overriding the shell."""
+    global _env_files_loaded
+    if _env_files_loaded:
+        return
+    for filename in ENV_FILES:
+        credentials_path = Path(__file__).with_name(filename)
+        if not credentials_path.exists():
+            continue
+        for line in credentials_path.read_text().splitlines():
+            key, separator, value = line.partition("=")
+            key = key.strip()
+            if separator and key and not key.startswith("#"):
+                os.environ.setdefault(key, value.strip().strip('"').strip("'"))
+    _env_files_loaded = True
+
+
+def _uses_tls(mongo_uri):
+    """Atlas (mongodb+srv) and explicit tls/ssl URIs need a CA bundle; local mongod does not."""
+    lowered = mongo_uri.lower()
+    return lowered.startswith("mongodb+srv://") or "tls=true" in lowered or "ssl=true" in lowered
+
+
+def get_mongo_client(mongo_uri):
+    """Return the process-wide MongoClient for the given URI, creating it on first use."""
+    global _mongo_client, _mongo_client_uri
+    with _mongo_lock:
+        if _mongo_client is None or _mongo_client_uri != mongo_uri:
+            kwargs = {"serverSelectionTimeoutMS": 5000}
+            if certifi and _uses_tls(mongo_uri):
+                kwargs["tlsCAFile"] = certifi.where()
+            _mongo_client = MongoClient(mongo_uri, **kwargs)
+            _mongo_client_uri = mongo_uri
+        return _mongo_client
+
 
 def get_mongo_db():
-    """Connect to MongoDB using test config, atlas-credentials.env, or environment variables."""
+    """Return the MongoDB database that stores user accounts, or None if unconfigured."""
     if app.config.get("MONGO_DB") is not None:
         return app.config["MONGO_DB"]
 
-    for filename in ("atlas-credentials.env", ".env"):
-        credentials_path = Path(__file__).with_name(filename)
-        if credentials_path.exists():
-            for line in credentials_path.read_text().splitlines():
-                key, separator, value = line.partition("=")
-                if separator and key.strip() and not key.lstrip().startswith("#"):
-                    os.environ.setdefault(
-                        key.strip(), value.strip().strip('"').strip("'")
-                    )
-
+    _load_env_files()
     mongo_uri = os.getenv("MONGODB_URI")
     database_name = os.getenv("MONGODB_DATABASE", "habit_tracker")
     if not mongo_uri:
+        app.logger.warning("MONGODB_URI is not set; user accounts are unavailable.")
         return None
 
     try:
-        kwargs = {"serverSelectionTimeoutMS": 5000}
-        if certifi:
-            kwargs["tlsCAFile"] = certifi.where()
-        client = MongoClient(mongo_uri, **kwargs)
-        return client[database_name]
-    except (OSError, PyMongoError, RuntimeError):
+        return get_mongo_client(mongo_uri)[database_name]
+    except (OSError, PyMongoError, RuntimeError) as e:
+        app.logger.error(f"Could not create MongoDB client: {e}")
         return None
+
+
+def ensure_user_indexes(users):
+    """Create the unique indexes that keep emails and usernames unique across requests.
+
+    create_index is idempotent, so calling this before every registration is safe.
+    The username index is sparse because accounts created by the login story may
+    not have a username field.
+    """
+    users.create_index([("email", ASCENDING)], unique=True, name="email_unique")
+    users.create_index([("username", ASCENDING)], unique=True, sparse=True, name="username_unique")
+
+
+def _duplicate_user_error(users, username, email):
+    """Explain which unique field collided after a DuplicateKeyError."""
+    try:
+        if users.find_one({"email": email}):
+            return "Email is already registered. Please log in."
+        if users.find_one({"username": username}):
+            return "Username is already taken. Please choose another."
+    except (OSError, PyMongoError):
+        pass
+    return "That email or username is already in use."
 
 
 @app.route("/")
@@ -97,8 +167,9 @@ def login():
             user = None
             if mongo_db is not None:
                 try:
-                    user = mongo_db["users"].find_one({"email": email})
-                except (OSError, PyMongoError):
+                    user = mongo_db[USERS_COLLECTION].find_one({"email": email})
+                except (OSError, PyMongoError) as e:
+                    app.logger.error(f"Error looking up user during login: {e}")
                     user = None
 
             stored_password = user.get("password", "") if user else ""
@@ -216,64 +287,77 @@ def register():
     if session.get("user_id"):
         return redirect(url_for("habit_dashboard"))
 
+    username = ""
+    email = ""
+
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
         confirm_password = request.form.get("confirm_password", "")
 
-        # Input Validation
+        # Input validation
+        error = None
         if not username or not email or not password:
-            flash("All fields are required.", "error")
-            return render_template("auth/register.html", username=username, email=email)
+            error = "All fields are required."
+        elif len(password) < 8:
+            error = "Password must be at least 8 characters long."
+        elif password != confirm_password:
+            error = "Passwords do not match."
 
-        if len(password) < 8:
-            flash("Password must be at least 8 characters long.", "error")
-            return render_template("auth/register.html", username=username, email=email)
+        if error is None:
+            mongo_db = get_mongo_db()
+            if mongo_db is None:
+                error = "Database connection error. Please try again later."
+            else:
+                error = _create_user(mongo_db[USERS_COLLECTION], username, email, password)
 
-        if password != confirm_password:
-            flash("Passwords do not match.", "error")
-            return render_template("auth/register.html", username=username, email=email)
+        if error is None:
+            flash("Registration successful! Welcome to Habit Tracker.", "success")
+            return redirect(url_for("habit_dashboard"))
 
-        mongo_db = get_mongo_db()
-        if mongo_db is None:
-            flash("Database connection error. Please try again later.", "error")
-            return render_template("auth/register.html", username=username, email=email)
+        flash(error, "error")
 
-        users_col = mongo_db["users"]
+    return render_template("auth/register.html", page_id="register", username=username, email=email)
 
-        # Check existing username / email
-        try:
-            if users_col.find_one({"username": username}):
-                flash("Username is already taken. Please choose another.", "error")
-                return render_template("auth/register.html", username=username, email=email)
 
-            if users_col.find_one({"email": email}):
-                flash("Email is already registered. Please log in.", "error")
-                return render_template("auth/register.html", username=username, email=email)
+def _create_user(users, username, email, password):
+    """Insert a new account and log it in. Returns an error message, or None on success.
 
-            hashed_pw = generate_password_hash(password)
-            new_user = {
+    The document shape matches what the login route reads: the werkzeug hash is
+    stored once, under "password".
+    """
+    try:
+        ensure_user_indexes(users)
+    except (OSError, PyMongoError) as e:
+        # Pre-existing duplicate data would block index creation; the checks below still run.
+        app.logger.warning(f"Could not ensure user indexes: {e}")
+
+    try:
+        if users.find_one({"username": username}):
+            return "Username is already taken. Please choose another."
+        if users.find_one({"email": email}):
+            return "Email is already registered. Please log in."
+
+        result = users.insert_one(
+            {
                 "username": username,
                 "email": email,
-                "password": hashed_pw,
-                "password_hash": hashed_pw,
+                "password": generate_password_hash(password),
                 "created_at": datetime.utcnow(),
             }
-            result = users_col.insert_one(new_user)
-        except (OSError, PyMongoError):
-            flash("Database error occurred while creating account.", "error")
-            return render_template("auth/register.html", username=username, email=email)
+        )
+    except DuplicateKeyError:
+        # Another request registered the same email/username between our check and insert.
+        return _duplicate_user_error(users, username, email)
+    except (OSError, PyMongoError) as e:
+        app.logger.error(f"Error creating user: {e}")
+        return "Database error occurred while creating account."
 
-        # Log user in after successful registration
-        session["user_id"] = str(result.inserted_id)
-        session["username"] = username
-        session["user_email"] = email
-
-        flash("Registration successful! Welcome to Habit Tracker.", "success")
-        return redirect(url_for("habit_dashboard"))
-
-    return render_template("auth/register.html")
+    session["user_id"] = str(result.inserted_id)
+    session["username"] = username
+    session["user_email"] = email
+    return None
 
 
 @app.route("/logout", methods=["GET", "POST"])
@@ -302,7 +386,6 @@ def _migrate_habit_table():
         missing_columns = {
             "target": "INTEGER",
             "frequency": "VARCHAR(20)",
-            "user_id": "INTEGER",
             "completed_dates": "TEXT",
             "created_at": "DATETIME",
             "description": "TEXT",
@@ -311,9 +394,7 @@ def _migrate_habit_table():
         with db.engine.begin() as connection:
             for name, column_type in missing_columns.items():
                 if name not in columns:
-                    connection.execute(
-                        text(f"ALTER TABLE habit ADD COLUMN {name} {column_type}")
-                    )
+                    connection.execute(text(f"ALTER TABLE habit ADD COLUMN {name} {column_type}"))
     except Exception as e:
         app.logger.warning(f"Habit table migration notice: {e}")
 
