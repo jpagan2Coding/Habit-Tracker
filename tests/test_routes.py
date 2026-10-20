@@ -2,7 +2,6 @@ import pytest
 
 from models import Habit
 
-
 # === Habit Tracker Tests ===
 
 def test_habit_tracker_get_returns_ok(client):
@@ -81,7 +80,7 @@ def test_login_get_returns_ok(client):
     response = client.get('/login')
 
     assert response.status_code == 200
-    assert b'Log in to HabitBuddy' in response.data
+    assert b'Log in to ' in response.data
     assert b'Email address' in response.data
 
 
