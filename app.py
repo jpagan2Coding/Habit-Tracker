@@ -2,6 +2,11 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+try:
+    import certifi
+except ImportError:
+    certifi = None
+
 from flask import Flask, flash, redirect, render_template, request, session, url_for
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
@@ -25,14 +30,15 @@ def get_mongo_db():
     if app.config.get("MONGO_DB") is not None:
         return app.config["MONGO_DB"]
 
-    credentials_path = Path(__file__).with_name("atlas-credentials.env")
-    if credentials_path.exists():
-        for line in credentials_path.read_text().splitlines():
-            key, separator, value = line.partition("=")
-            if separator and key.strip() and not key.lstrip().startswith("#"):
-                os.environ.setdefault(
-                    key.strip(), value.strip().strip('"').strip("'")
-                )
+    for filename in ("atlas-credentials.env", ".env"):
+        credentials_path = Path(__file__).with_name(filename)
+        if credentials_path.exists():
+            for line in credentials_path.read_text().splitlines():
+                key, separator, value = line.partition("=")
+                if separator and key.strip() and not key.lstrip().startswith("#"):
+                    os.environ.setdefault(
+                        key.strip(), value.strip().strip('"').strip("'")
+                    )
 
     mongo_uri = os.getenv("MONGODB_URI")
     database_name = os.getenv("MONGODB_DATABASE", "habit_tracker")
@@ -40,7 +46,10 @@ def get_mongo_db():
         return None
 
     try:
-        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+        kwargs = {"serverSelectionTimeoutMS": 5000}
+        if certifi:
+            kwargs["tlsCAFile"] = certifi.where()
+        client = MongoClient(mongo_uri, **kwargs)
         return client[database_name]
     except (OSError, PyMongoError, RuntimeError):
         return None
