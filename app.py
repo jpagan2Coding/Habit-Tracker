@@ -1,13 +1,17 @@
 import os
 from datetime import datetime
+from pathlib import Path
 
-from flask import Flask, render_template, request, redirect, url_for, session
-from sqlalchemy import inspect, text
+from dotenv import load_dotenv
+from flask import Flask, redirect, render_template, request, session, url_for
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
+from sqlalchemy import inspect, text
 from werkzeug.security import check_password_hash
 
 from extensions import db
+
+load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "dev-secret-key-change-in-production"
