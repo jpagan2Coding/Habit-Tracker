@@ -1,7 +1,8 @@
 import os
 from datetime import datetime
 
-from flask import Flask, redirect, render_template, request, session, url_for
+from flask import Flask, render_template, request, redirect, url_for, session
+from sqlalchemy import inspect, text
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from werkzeug.security import check_password_hash
@@ -153,6 +154,26 @@ def logout():
 def init_db():
     with app.app_context():
         db.create_all()
+        _migrate_habit_table()
+
+
+def _migrate_habit_table():
+    """Add habit columns introduced after an existing database was created."""
+    columns = {
+        column['name']
+        for column in inspect(db.engine).get_columns('habit')
+    }
+    missing_columns = {
+        'target': 'INTEGER',
+        'frequency': 'VARCHAR(20)',
+    }
+
+    with db.engine.begin() as connection:
+        for name, column_type in missing_columns.items():
+            if name not in columns:
+                connection.execute(
+                    text(f'ALTER TABLE habit ADD COLUMN {name} {column_type}')
+                )
 
 
 init_db()
