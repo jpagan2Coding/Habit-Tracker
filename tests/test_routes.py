@@ -1,6 +1,7 @@
 import pytest
+from werkzeug.security import check_password_hash
 
-from models import Habit, User
+from models import Habit
 
 # === Habit Tracker Tests ===
 
@@ -10,35 +11,6 @@ def test_habit_tracker_get_returns_ok(client):
     response = client.get("/habit-tracker")
 
     assert response.status_code == 200
-
-
-def test_login_get_returns_ok(client):
-    """Test that the login page renders successfully."""
-    response = client.get("/login")
-
-    assert response.status_code == 200
-    assert b"Log in to HabitBuddy" in response.data
-    assert b"Email address" in response.data
-
-
-def test_login_requires_both_fields(client):
-    """Test that an incomplete login shows a helpful validation message."""
-    response = client.post("/login", data={"email": "", "password": ""})
-
-    assert response.status_code == 200
-    assert b"Enter both your email and password" in response.data
-
-
-def test_login_redirects_to_dashboard_with_credentials(client):
-    """Test the temporary demo login flow."""
-    response = client.post(
-        "/login",
-        data={"email": "person@example.com", "password": "password"},
-        follow_redirects=False,
-    )
-
-    assert response.status_code == 302
-    assert response.headers["Location"].endswith("/dashboard")
 
 
 def test_habit_tracker_post_creates_habit(client):
@@ -103,6 +75,36 @@ def test_dashboard_displays_date_and_welcome(client):
     assert f"Today: {today}".encode() in response.data
     assert b"Welcome back!" in response.data
 
+# === Login Tests ===
+
+def test_login_get_returns_ok(client):
+    """Test that the login page renders successfully."""
+    response = client.get('/login')
+
+    assert response.status_code == 200
+    assert b'Log in to HabitBuddy' in response.data
+    assert b'Email address' in response.data
+
+
+def test_login_requires_both_fields(client):
+    """Test that an incomplete login shows a helpful validation message."""
+    response = client.post('/login', data={'email': '', 'password': ''})
+
+    assert response.status_code == 200
+    assert b'Enter both your email and password' in response.data
+
+
+def test_login_redirects_to_dashboard_with_credentials(client):
+    """Test the temporary demo login flow."""
+    response = client.post(
+        '/login',
+        data={'email': 'person@example.com', 'password': 'password'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers['Location'].endswith('/dashboard')
+
 
 # === Parametrized Tests ===
 
@@ -125,7 +127,7 @@ def test_register_get_returns_ok(client):
     assert b"Create an Account" in response.data
 
 
-def test_register_post_creates_user(client):
+def test_register_post_creates_user(client, mongo_client):
     data = {
         "username": "newuser",
         "email": "newuser@example.com",
@@ -135,13 +137,15 @@ def test_register_post_creates_user(client):
     response = client.post("/register", data=data, follow_redirects=True)
     assert response.status_code == 200
 
-    user = User.query.filter_by(username="newuser").first()
+    database = mongo_client["habit_tracker_test"]
+    user = database["users"].find_one({"username": "newuser"})
     assert user is not None
-    assert user.email == "newuser@example.com"
-    assert user.check_password("password123")
+    assert user["email"] == "newuser@example.com"
+    assert check_password_hash(user["password"], "password123")
+    assert check_password_hash(user["password_hash"], "password123")
 
 
-def test_register_post_rejects_mismatched_passwords(client):
+def test_register_post_rejects_mismatched_passwords(client, mongo_client):
     data = {
         "username": "mismatch",
         "email": "mismatch@example.com",
@@ -151,7 +155,45 @@ def test_register_post_rejects_mismatched_passwords(client):
     response = client.post("/register", data=data)
     assert response.status_code == 200
     assert b"Passwords do not match" in response.data
-    assert User.query.filter_by(username="mismatch").first() is None
+
+    database = mongo_client["habit_tracker_test"]
+    assert database["users"].find_one({"username": "mismatch"}) is None
+
+
+def test_register_post_rejects_duplicate_username(client, mongo_client):
+    database = mongo_client["habit_tracker_test"]
+    database["users"].insert_one({
+        "username": "existinguser",
+        "email": "existing@example.com",
+        "password": "hashedpassword",
+    })
+    data = {
+        "username": "existinguser",
+        "email": "unique@example.com",
+        "password": "password123",
+        "confirm_password": "password123",
+    }
+    response = client.post("/register", data=data)
+    assert response.status_code == 200
+    assert b"Username is already taken" in response.data
+
+
+def test_register_post_rejects_duplicate_email(client, mongo_client):
+    database = mongo_client["habit_tracker_test"]
+    database["users"].insert_one({
+        "username": "uniqueuser",
+        "email": "duplicate@example.com",
+        "password": "hashedpassword",
+    })
+    data = {
+        "username": "anotheruser",
+        "email": "duplicate@example.com",
+        "password": "password123",
+        "confirm_password": "password123",
+    }
+    response = client.post("/register", data=data)
+    assert response.status_code == 200
+    assert b"Email is already registered" in response.data
 
 
 def test_register_redirects_if_already_logged_in(client):

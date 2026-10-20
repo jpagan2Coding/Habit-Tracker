@@ -11,10 +11,10 @@
 </head>
 <body class="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 flex flex-col">
     <nav class="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-100 sticky top-0 z-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
                 <div class="flex items-center">
-                    <a href="/" class="flex flex-col">
+                    <a href="/dashboard" class="flex flex-col">
                         <span class="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Habit Tracker</span>
                         <span class="text-xs text-gray-500">Build Your Perfect Habit Tracking App</span>
                     </a>
@@ -70,7 +70,6 @@
                 {% endif %}
             {% endwith %}
             {% endblock %}
-
             <div class="animate-fade-in">
                 {% block content %}{% endblock %}
             </div>
@@ -78,7 +77,7 @@
     </main>
 
     <footer class="bg-white border-t border-gray-200 mt-auto">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class=" mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div class="flex flex-col md:flex-row justify-between items-center">
                 <p class="text-gray-500 text-sm">© 2026 Habit Tracker - SSW555 Team Project</p>
                 <div class="flex space-x-6 mt-4 md:mt-0">

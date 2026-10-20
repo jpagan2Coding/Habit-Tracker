@@ -1,6 +1,12 @@
+import os
 from datetime import datetime
+from pathlib import Path
 
 from flask import Flask, flash, redirect, render_template, request, session, url_for
+from pymongo import MongoClient
+from pymongo.errors import PyMongoError
+from sqlalchemy import inspect, text
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from extensions import db
 
@@ -11,7 +17,33 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db.init_app(app)
 
-from models import FREQUENCY_CHOICES, Habit, User  # noqa: E402
+from models import FREQUENCY_CHOICES, Habit  # noqa: E402
+
+
+def get_mongo_db():
+    """Connect to MongoDB using test config, atlas-credentials.env, or environment variables."""
+    if app.config.get("MONGO_DB") is not None:
+        return app.config["MONGO_DB"]
+
+    credentials_path = Path(__file__).with_name("atlas-credentials.env")
+    if credentials_path.exists():
+        for line in credentials_path.read_text().splitlines():
+            key, separator, value = line.partition("=")
+            if separator and key.strip() and not key.lstrip().startswith("#"):
+                os.environ.setdefault(
+                    key.strip(), value.strip().strip('"').strip("'")
+                )
+
+    mongo_uri = os.getenv("MONGODB_URI")
+    database_name = os.getenv("MONGODB_DATABASE", "habit_tracker")
+    if not mongo_uri:
+        return None
+
+    try:
+        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+        return client[database_name]
+    except (OSError, PyMongoError, RuntimeError):
+        return None
 
 
 @app.route("/")
@@ -21,20 +53,33 @@ def home():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    """Render the login screen and provide demo access to the tracker."""
+    """Render the login screen and authenticate an existing user."""
     error = None
     email = ""
 
     if request.method == "POST":
-        email = request.form.get("email", "").strip()
+        email = request.form.get("email", "").strip().lower()
         password = request.form.get("password", "")
 
         if not email or not password:
             error = "Enter both your email and password to continue."
         else:
-            # TODO: Implement proper auth here
-            session["user_email"] = email
-            return redirect(url_for("habit_dashboard"))
+            mongo_db = get_mongo_db()
+            user = None
+            if mongo_db is not None:
+                try:
+                    user = mongo_db["users"].find_one({"email": email})
+                except (OSError, PyMongoError):
+                    user = None
+
+            stored_password = user.get("password", "") if user else ""
+            if user and check_password_hash(stored_password, password):
+                session["user_id"] = str(user.get("_id", ""))
+                session["username"] = user.get("username", email)
+                session["user_email"] = email
+                return redirect(url_for("habit_dashboard"))
+
+            error = "Invalid email or password."
 
     return render_template(
         "auth/login.html",
@@ -95,12 +140,17 @@ def habit_dashboard():
 
     today = datetime.utcnow().date().isoformat()
 
-    completed_today = sum(
-        1
+    completion_by_id = {
+        habit.id: today
+        in {
+            date_value.strip()
+            for date_value in (habit.completed_dates or "").split(",")
+            if date_value.strip()
+        }
         for habit in habits
-        if habit.completed_dates
-        and today in [date_value.strip() for date_value in habit.completed_dates.split(",")]
-    )
+    }
+
+    completed_today = sum(completion_by_id.values())
 
     total_habits = len(habits)
     scheduled_today = total_habits
@@ -113,6 +163,7 @@ def habit_dashboard():
         "apps/habit_tracker/dashboard.html",
         page_id="dashboard",
         habits=habits,
+        completion_by_id=completion_by_id,
         total_habits=total_habits,
         completed_today=completed_today,
         scheduled_today=scheduled_today,
@@ -146,24 +197,40 @@ def register():
             flash("Passwords do not match.", "error")
             return render_template("auth/register.html", username=username, email=email)
 
+        mongo_db = get_mongo_db()
+        if mongo_db is None:
+            flash("Database connection error. Please try again later.", "error")
+            return render_template("auth/register.html", username=username, email=email)
+
+        users_col = mongo_db["users"]
+
         # Check existing username / email
-        if User.query.filter_by(username=username).first():
-            flash("Username is already taken. Please choose another.", "error")
+        try:
+            if users_col.find_one({"username": username}):
+                flash("Username is already taken. Please choose another.", "error")
+                return render_template("auth/register.html", username=username, email=email)
+
+            if users_col.find_one({"email": email}):
+                flash("Email is already registered. Please log in.", "error")
+                return render_template("auth/register.html", username=username, email=email)
+
+            hashed_pw = generate_password_hash(password)
+            new_user = {
+                "username": username,
+                "email": email,
+                "password": hashed_pw,
+                "password_hash": hashed_pw,
+                "created_at": datetime.utcnow(),
+            }
+            result = users_col.insert_one(new_user)
+        except (OSError, PyMongoError):
+            flash("Database error occurred while creating account.", "error")
             return render_template("auth/register.html", username=username, email=email)
 
-        if User.query.filter_by(email=email).first():
-            flash("Email is already registered. Please log in.", "error")
-            return render_template("auth/register.html", username=username, email=email)
-
-        # Create new user
-        new_user = User(username=username, email=email)
-        new_user.set_password(password)
-        db.session.add(new_user)
-        db.session.commit()
-
-        # Log user in after successful reg
-        session["user_id"] = new_user.id
-        session["username"] = new_user.username
+        # Log user in after successful registration
+        session["user_id"] = str(result.inserted_id)
+        session["username"] = username
+        session["user_email"] = email
 
         flash("Registration successful! Welcome to Habit Tracker.", "success")
         return redirect(url_for("habit_dashboard"))
@@ -180,6 +247,26 @@ def logout():
 def init_db():
     with app.app_context():
         db.create_all()
+        _migrate_habit_table()
+
+
+def _migrate_habit_table():
+    """Add habit columns introduced after an existing database was created."""
+    columns = {
+        column['name']
+        for column in inspect(db.engine).get_columns('habit')
+    }
+    missing_columns = {
+        'target': 'INTEGER',
+        'frequency': 'VARCHAR(20)',
+    }
+
+    with db.engine.begin() as connection:
+        for name, column_type in missing_columns.items():
+            if name not in columns:
+                connection.execute(
+                    text(f'ALTER TABLE habit ADD COLUMN {name} {column_type}')
+                )
 
 
 init_db()
