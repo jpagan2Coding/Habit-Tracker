@@ -2,26 +2,56 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+import certifi
 from dotenv import load_dotenv
-from flask import Flask, redirect, render_template, request, session, url_for
-from pymongo import MongoClient
-from pymongo.errors import PyMongoError
-from werkzeug.security import check_password_hash
+from flask import Flask, flash, redirect, render_template, request, session, url_for
+from pymongo import ASCENDING, MongoClient
+from pymongo.errors import DuplicateKeyError, PyMongoError
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from models import FREQUENCY_CHOICES
 
 load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = "dev-secret-key-change-in-production"
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+
+
+def _mongo_client_options(mongo_uri):
+    """Connection options for MongoClient.
+
+    Atlas requires TLS, and the python.org build of Python ships without a CA
+    bundle, so certificate verification fails with CERTIFICATE_VERIFY_FAILED
+    unless pymongo is pointed at certifi's bundle. Plain mongodb:// URIs (a local
+    mongod) are left untouched because tlsCAFile would force TLS on.
+    """
+    options = {"serverSelectionTimeoutMS": 5000}
+    lowered = mongo_uri.lower()
+    if lowered.startswith("mongodb+srv://") or "tls=true" in lowered or "ssl=true" in lowered:
+        options["tlsCAFile"] = certifi.where()
+    return options
+
+
 def get_db():
     """Connect to the team's MongoDB database using MONGODB_URI."""
     mongo_uri = os.getenv("MONGODB_URI")
     if not mongo_uri:
         raise RuntimeError("MONGODB_URI is not configured")
 
-    client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+    client = MongoClient(mongo_uri, **_mongo_client_options(mongo_uri))
     return client[os.getenv("MONGODB_DATABASE", "Habit-Tracker")]
+
+
+def ensure_user_indexes(users):
+    """Unique indexes so two registrations can never create the same email/username.
+
+    create_index is idempotent. The username index is sparse because accounts
+    seeded for the login story may not have a username field.
+    """
+    users.create_index([("email", ASCENDING)], unique=True, name="email_unique")
+    users.create_index(
+        [("username", ASCENDING)], unique=True, sparse=True, name="username_unique"
+    )
 
 
 @app.route("/")
@@ -43,19 +73,14 @@ def login():
             error = "Enter both your email and password to continue."
         else:
             try:
-                mongo_uri = os.getenv("MONGODB_URI")
-                database_name = os.getenv("MONGODB_DATABASE", "Habit-Tracker")
-                if not mongo_uri:
-                    raise RuntimeError("MONGODB_URI is not configured")
-
-                client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
-                database = client[database_name]
-                user = database["users"].find_one({"email": email})
+                user = get_db()["users"].find_one({"email": email})
             except (OSError, PyMongoError, RuntimeError):
                 user = None
 
             stored_password = user.get("password", "") if user else ""
             if user and check_password_hash(stored_password, password):
+                session["user_id"] = str(user.get("_id", ""))
+                session["username"] = user.get("username", email)
                 session["user_email"] = email
                 return redirect(url_for("habit_dashboard"))
 
@@ -152,6 +177,96 @@ def habit_dashboard():
         current_streak=None,
         today=today,
     )
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    """Create a new account in the MongoDB users collection and log it in."""
+    if session.get("user_id"):
+        return redirect(url_for("habit_dashboard"))
+
+    username = ""
+    email = ""
+
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        error = None
+        if not username or not email or not password:
+            error = "All fields are required."
+        elif len(password) < 8:
+            error = "Password must be at least 8 characters long."
+        elif password != confirm_password:
+            error = "Passwords do not match."
+
+        if error is None:
+            try:
+                users = get_db()["users"]
+            except (OSError, PyMongoError, RuntimeError) as e:
+                app.logger.error(f"Database connection error during registration: {e}")
+                error = "Database connection error. Please try again later."
+            else:
+                error = _create_user(users, username, email, password)
+
+        if error is None:
+            flash("Registration successful! Welcome to Habit Tracker.", "success")
+            return redirect(url_for("habit_dashboard"))
+
+        flash(error, "error")
+
+    return render_template(
+        "auth/register.html", page_id="register", username=username, email=email
+    )
+
+
+def _create_user(users, username, email, password):
+    """Insert a user document shaped the way login reads it. Returns an error or None."""
+    try:
+        ensure_user_indexes(users)
+    except (OSError, PyMongoError) as e:
+        # Pre-existing duplicate data would block index creation; the checks below still run.
+        app.logger.warning(f"Could not ensure user indexes: {e}")
+
+    try:
+        if users.find_one({"username": username}):
+            return "Username is already taken. Please choose another."
+        if users.find_one({"email": email}):
+            return "Email is already registered. Please log in."
+
+        result = users.insert_one(
+            {
+                "username": username,
+                "email": email,
+                "password": generate_password_hash(password),
+                "created_at": datetime.utcnow(),
+            }
+        )
+    except DuplicateKeyError:
+        # Another request registered the same email/username between our check and insert.
+        return _duplicate_user_error(users, username, email)
+    except (OSError, PyMongoError) as e:
+        app.logger.error(f"Error creating user: {e}")
+        return "Database error occurred while creating account."
+
+    session["user_id"] = str(result.inserted_id)
+    session["username"] = username
+    session["user_email"] = email
+    return None
+
+
+def _duplicate_user_error(users, username, email):
+    """Explain which unique field collided after a DuplicateKeyError."""
+    try:
+        if users.find_one({"email": email}):
+            return "Email is already registered. Please log in."
+        if users.find_one({"username": username}):
+            return "Username is already taken. Please choose another."
+    except (OSError, PyMongoError):
+        pass
+    return "That email or username is already in use."
 
 
 @app.route("/logout", methods=["POST"])

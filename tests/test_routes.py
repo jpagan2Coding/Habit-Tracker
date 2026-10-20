@@ -1,6 +1,5 @@
 import pytest
 
-
 # === Habit Tracker Tests ===
 
 def test_habit_tracker_get_returns_ok(client):
@@ -114,3 +113,141 @@ def test_all_pages_get_returns_ok(client, endpoint):
     response = client.get(endpoint)
 
     assert response.status_code == 200
+
+
+# === Registration Tests ===
+
+from datetime import datetime  # noqa: E402
+
+from werkzeug.security import check_password_hash  # noqa: E402
+
+REGISTER_DATA = {
+    'username': 'newuser',
+    'email': 'NewUser@Example.com',
+    'password': 'password123',
+    'confirm_password': 'password123',
+}
+
+
+def _users(mongo_client):
+    return mongo_client['Habit-Tracker_test']['users']
+
+
+def test_register_get_returns_ok(client):
+    response = client.get('/register')
+    assert response.status_code == 200
+    assert b'Create an Account' in response.data
+
+
+def test_register_post_creates_user_and_logs_in(client, mongo_client):
+    response = client.post('/register', data=REGISTER_DATA, follow_redirects=True)
+    assert response.status_code == 200
+    assert response.request.path == '/dashboard'
+    assert b'Registration successful' in response.data
+
+    user = _users(mongo_client).find_one({'username': 'newuser'})
+    assert user is not None
+    assert user['email'] == 'newuser@example.com'  # lowercased, same as login
+    assert check_password_hash(user['password'], 'password123')
+    assert isinstance(user['created_at'], datetime)
+
+    with client.session_transaction() as sess:
+        assert sess['user_id'] == str(user['_id'])
+        assert sess['username'] == 'newuser'
+        assert sess['user_email'] == 'newuser@example.com'
+
+
+def test_registered_user_can_log_in(client):
+    assert client.post('/register', data=REGISTER_DATA).status_code == 302
+    client.post('/logout')
+
+    response = client.post(
+        '/login', data={'email': 'newuser@example.com', 'password': 'password123'}
+    )
+    assert response.status_code == 302
+    assert response.headers['Location'].endswith('/dashboard')
+
+
+def test_register_creates_unique_indexes(client, mongo_client):
+    client.post('/register', data=REGISTER_DATA)
+    indexes = _users(mongo_client).index_information()
+    assert indexes['email_unique']['unique'] is True
+    assert indexes['username_unique']['unique'] is True
+    assert indexes['username_unique']['sparse'] is True
+
+
+def test_register_rejects_mismatched_passwords(client, mongo_client):
+    data = {**REGISTER_DATA, 'confirm_password': 'different'}
+    response = client.post('/register', data=data)
+    assert response.status_code == 200
+    assert b'Passwords do not match' in response.data
+    assert _users(mongo_client).find_one({'username': 'newuser'}) is None
+
+
+def test_register_rejects_short_password(client, mongo_client):
+    data = {**REGISTER_DATA, 'password': 'short', 'confirm_password': 'short'}
+    response = client.post('/register', data=data)
+    assert response.status_code == 200
+    assert b'at least 8 characters' in response.data
+    assert _users(mongo_client).find_one({'username': 'newuser'}) is None
+
+
+def test_register_rejects_duplicate_username(client, mongo_client):
+    _users(mongo_client).insert_one({'username': 'newuser', 'email': 'other@example.com'})
+    response = client.post('/register', data=REGISTER_DATA)
+    assert response.status_code == 200
+    assert b'Username is already taken' in response.data
+
+
+def test_register_rejects_duplicate_email(client, mongo_client):
+    _users(mongo_client).insert_one({'username': 'someone', 'email': 'newuser@example.com'})
+    response = client.post('/register', data=REGISTER_DATA)
+    assert response.status_code == 200
+    assert b'Email is already registered' in response.data
+    assert _users(mongo_client).count_documents({'email': 'newuser@example.com'}) == 1
+
+
+def test_register_handles_duplicate_created_between_check_and_insert(
+    client, mongo_client, monkeypatch
+):
+    """A concurrent registration that wins the race is caught by the unique index."""
+    import app as app_module
+
+    users = _users(mongo_client)
+    app_module.ensure_user_indexes(users)
+    real_hash = app_module.generate_password_hash
+
+    def hash_after_competitor_registers(password):
+        users.insert_one({'username': 'competitor', 'email': 'newuser@example.com'})
+        return real_hash(password)
+
+    monkeypatch.setattr(app_module, 'generate_password_hash', hash_after_competitor_registers)
+
+    response = client.post('/register', data=REGISTER_DATA)
+    assert response.status_code == 200
+    assert b'Email is already registered' in response.data
+    assert users.count_documents({'email': 'newuser@example.com'}) == 1
+    with client.session_transaction() as sess:
+        assert 'user_id' not in sess
+
+
+def test_register_without_database_shows_error(client, monkeypatch):
+    monkeypatch.delenv('MONGODB_URI', raising=False)
+    response = client.post('/register', data=REGISTER_DATA)
+    assert response.status_code == 200
+    assert b'Database connection error' in response.data
+
+
+def test_register_redirects_if_already_logged_in(client):
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'abc'
+    response = client.get('/register')
+    assert response.status_code == 302
+    assert response.headers['Location'].endswith('/dashboard')
+
+
+def test_navbar_shows_register_only_when_logged_out(client):
+    assert b'Register' in client.get('/habit-tracker').data
+    with client.session_transaction() as sess:
+        sess['user_id'] = 'abc'
+    assert b'Register' not in client.get('/dashboard').data
