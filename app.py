@@ -1,6 +1,11 @@
+import os
 from datetime import datetime
+from pathlib import Path
 
 from flask import Flask, render_template, request, redirect, url_for, session
+from pymongo import MongoClient
+from pymongo.errors import PyMongoError
+from werkzeug.security import check_password_hash
 
 from extensions import db
 
@@ -22,7 +27,7 @@ def home():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Render the login screen and provide demo access to the tracker."""
+    """Render the login screen and authenticate an existing user."""
     error = None
     email = ''
 
@@ -33,9 +38,42 @@ def login():
         if not email or not password:
             error = 'Enter both your email and password to continue.'
         else:
-            # TODO: Implement proper auth here
-            session['user_email'] = email
-            return redirect(url_for('habit_dashboard'))
+            try:
+                credentials_path = Path(__file__).with_name('atlas-credentials.env')
+                if credentials_path.exists():
+                    for line in credentials_path.read_text().splitlines():
+                        key, separator, value = line.partition('=')
+                        if separator and key.strip() and not key.lstrip().startswith('#'):
+                            os.environ.setdefault(
+                                key.strip(), value.strip().strip('"').strip("'")
+                            )
+
+                mongo_uri = os.getenv('MONGODB_URI')
+                database_name = os.getenv('MONGODB_DATABASE', 'habit_tracker')
+                if not mongo_uri:
+                    raise RuntimeError('MONGODB_URI is not configured')
+
+                client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
+                database = client[database_name]
+                user = database['users'].find_one(
+                    {
+                        '$or': [
+                            {'username': email},
+                            {'email': email.lower()},
+                        ]
+                    }
+                )
+            except (OSError, PyMongoError, RuntimeError):
+                user = None
+
+            password_hash = user.get('password_hash') if user else None
+            if user and password_hash and check_password_hash(password_hash, password):
+                session['user_id'] = str(user.get('_id', user.get('id', '')))
+                session['username'] = user.get('username', email)
+                session['user_email'] = user.get('email', email)
+                return redirect(url_for('habit_dashboard'))
+
+            error = 'Invalid email or password.'
 
     return render_template(
         'auth/login.html',
