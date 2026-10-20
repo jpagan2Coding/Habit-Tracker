@@ -9,6 +9,10 @@ on:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
+    env:
+      APP_ENV: test
+      MONGODB_URI: mongodb://mocked-ci-only
+      MONGODB_DATABASE: habit_tracker_test
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -29,7 +33,7 @@ jobs:
         enable-cache: true
 
     - name: Install dependencies
-      run: uv sync
+      run: uv sync --extra dev
 
     - name: Run linter (ruff)
       run: uv run ruff check . || true
@@ -73,7 +77,7 @@ jobs:
       uses: astral-sh/setup-uv@v4
 
     - name: Install dependencies
-      run: uv sync
+      run: uv sync --extra dev
 
     - name: Check code formatting with ruff
       run: uv run ruff format --check .
@@ -99,7 +103,7 @@ jobs:
       uses: astral-sh/setup-uv@v4
 
     - name: Install dependencies
-      run: uv sync
+      run: uv sync --extra dev
 
     - name: Run security check with bandit
       run: |
@@ -132,7 +136,7 @@ jobs:
       uses: astral-sh/setup-uv@v4
 
     - name: Install dependencies
-      run: uv sync
+      run: uv sync --extra dev
 
     - name: Verify app starts
       run: |

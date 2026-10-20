@@ -6,14 +6,34 @@ This module provides shared fixtures used across all test files:
 - client: Flask test client for making HTTP requests
 """
 
+import mongomock
 import pytest
+from werkzeug.security import generate_password_hash
 
 from app import app as flask_app
 from extensions import db
 
 
 @pytest.fixture
-def app(tmp_path):
+def mongo_client(monkeypatch):
+    """Provide an in-memory MongoDB replacement for authentication tests."""
+    client = mongomock.MongoClient()
+    database = client["habit_tracker_test"]
+    database["users"].insert_one(
+        {
+            "email": "person@example.com",
+            "password": generate_password_hash("password"),
+        }
+    )
+
+    monkeypatch.setattr("app.MongoClient", lambda *args, **kwargs: client)
+    monkeypatch.setenv("MONGODB_URI", "mongodb://mocked-ci-only")
+    monkeypatch.setenv("MONGODB_DATABASE", "habit_tracker_test")
+    return client
+
+
+@pytest.fixture
+def app(tmp_path, mongo_client):
     """
     Create and configure a Flask application instance for testing.
 
