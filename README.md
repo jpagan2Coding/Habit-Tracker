@@ -1,5 +1,7 @@
 # Habit Tracker
 
+[![CI](https://github.com/jpagan2Coding/Habit-Tracker/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jpagan2Coding/Habit-Tracker/actions/workflows/ci.yml)
+
 A web application that helps users create, manage, and track daily habits and progress toward consistent routines.
 
 **Course:** SSW555 — Agile Methods for Software Development  
