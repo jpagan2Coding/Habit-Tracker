@@ -2,6 +2,11 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+import secrets
+
+from bson import ObjectId
+from flask import abort
+
 import certifi
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, render_template, request, session, url_for
@@ -176,6 +181,7 @@ def habit_dashboard():
         completion_percentage=completion_percentage,
         current_streak=None,
         today=today,
+        habit_csrf_token=_habit_form_token(),
     )
 
 
@@ -274,6 +280,119 @@ def logout():
     session.clear()
     return redirect(url_for("home"))  # change to login once implemented
 
+def _habit_form_token():
+    token = session.get("habit_form_token")
+    if not token:
+        token = secrets.token_hex(32)
+        session["habit_form_token"] = token
+    return token
 
+
+def _validate_habit_form_token():
+    expected = session.get("habit_form_token")
+    submitted = request.form.get("csrf_token", "")
+    if not expected or not secrets.compare_digest(expected, submitted):
+        abort(400, description="Invalid form token. Reload the form and try again.")
+
+
+def _owned_habit(habit_id):
+    if not ObjectId.is_valid(habit_id):
+        abort(404)
+
+    query = {
+        "_id": ObjectId(habit_id),
+        "user_email": session["user_email"],
+    }
+    habit = get_db()["habits"].find_one(query)
+    if habit is None:
+        abort(404)
+    return query, habit
+
+
+@app.route("/habits/<habit_id>/edit", methods=["GET", "POST"])
+def edit_habit(habit_id):
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    query, habit = _owned_habit(habit_id)
+    errors = []
+    form = {
+        "name": habit.get("name", ""),
+        "description": habit.get("description") or "",
+        "target": str(habit.get("target", "")),
+        "frequency": habit.get("frequency", ""),
+    }
+
+    if request.method == "POST":
+        _validate_habit_form_token()
+        form = {
+            key: request.form.get(key, "").strip()
+            for key in form
+        }
+
+        if not form["name"]:
+            errors.append("Enter a name for your habit.")
+        elif len(form["name"]) > 100:
+            errors.append("Habit name must be 100 characters or fewer.")
+
+        try:
+            target = int(form["target"])
+        except ValueError:
+            target = 0
+
+        if target < 1:
+            errors.append("Target must be a whole number of 1 or more.")
+
+        if form["frequency"] not in FREQUENCY_CHOICES:
+            errors.append("Choose a frequency.")
+
+        if not errors:
+            result = get_db()["habits"].update_one(
+                query,
+                {
+                    "$set": {
+                        "name": form["name"],
+                        "description": form["description"] or None,
+                        "target": target,
+                        "frequency": form["frequency"],
+                    }
+                },
+            )
+            if result.matched_count == 0:
+                abort(404)
+            return redirect(url_for("habit_dashboard"))
+
+    return render_template(
+        "apps/habit_tracker/index.html",
+        page_id="habit-tracker",
+        form=form,
+        errors=errors,
+        frequency_choices=FREQUENCY_CHOICES,
+        editing=True,
+        habit_id=habit_id,
+        habit_csrf_token=_habit_form_token(),
+    ), (400 if errors else 200)
+
+
+@app.route("/habits/<habit_id>/delete", methods=["GET", "POST"])
+def delete_habit(habit_id):
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    query, habit = _owned_habit(habit_id)
+
+    if request.method == "POST":
+        _validate_habit_form_token()
+        result = get_db()["habits"].delete_one(query)
+        if result.deleted_count == 0:
+            abort(404)
+        return redirect(url_for("habit_dashboard"))
+
+    return render_template(
+        "apps/habit_tracker/delete.html",
+        habit=habit,
+        habit_id=habit_id,
+        habit_csrf_token=_habit_form_token(),
+    )
 if __name__ == "__main__":
     app.run(debug=True)
