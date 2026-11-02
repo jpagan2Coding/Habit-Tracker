@@ -1,29 +1,21 @@
-"""Acceptance tests for the planned GET /habits/<habit_id>/export endpoint.
+"""Acceptance tests for the GET /habits/<habit_id>/export endpoint.
 
 The .habit attachment contains UTF-8 CSV, with one row per completed date.
 Habits without history still have one row, with an empty completed_date.
-See docs/HABIT_EXPORT.md for the proposed file contract.
+See docs/HABIT_EXPORT.md for the file contract.
 """
 
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from bson import ObjectId
 from werkzeug.http import parse_options_header
 
-from app import app
-
-pytestmark = pytest.mark.xfail(
-    not any(rule.rule == '/habits/<habit_id>/export' for rule in app.url_map.iter_rules()),
-    reason='Habit export endpoint has not been implemented yet',
-    strict=True,
-)
-
 FIELDS = [
     'habit_id', 'name', 'description', 'target', 'frequency',
-    'user_email', 'created_at', 'completed_date',
+    'created_at', 'completed_date',
 ]
 
 
@@ -78,7 +70,6 @@ def test_export_contains_all_details_and_entire_completion_history(client, expor
         'description': 'Read 20 pages',
         'target': '1',
         'frequency': 'daily',
-        'user_email': 'person@example.com',
         'created_at': '2026-10-01T14:30:45Z',
     }
     assert rows == [
@@ -160,3 +151,33 @@ def test_export_does_not_modify_stored_habit(client, habits, export_habit):
 
     assert response.status_code == 200
     assert habits.find_one({'_id': export_habit['_id']}) == before
+
+
+def test_dashboard_links_to_export_in_both_habit_lists(client, export_habit):
+    response = client.get('/dashboard')
+
+    assert response.status_code == 200
+    assert response.data.count(f'href="{export_url(export_habit)}"'.encode()) == 2
+    assert b'aria-label="Export Read daily"' in response.data
+
+
+def test_export_normalizes_timezone_to_utc(client, monkeypatch, export_habit):
+    # Preserve timezone information here; MongoDB normally returns naive UTC.
+    export_habit['created_at'] = datetime(
+        2026, 10, 1, 10, 30, 45, tzinfo=timezone(timedelta(hours=-4))
+    )
+    monkeypatch.setattr('app._owned_habit', lambda habit_id: ({}, export_habit))
+
+    rows = read_export(client.get(export_url(export_habit)))
+
+    assert rows[0]['created_at'] == '2026-10-01T14:30:45Z'
+
+
+def test_export_requires_email_in_session(client, export_habit):
+    with client.session_transaction() as session:
+        session.pop('user_email')
+
+    response = client.get(export_url(export_habit))
+
+    assert response.status_code == 302
+    assert response.headers['Location'].endswith('/login')
