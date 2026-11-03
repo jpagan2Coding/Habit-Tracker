@@ -1,7 +1,7 @@
 import csv
 import io
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import secrets
@@ -17,7 +17,7 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from models import FREQUENCY_CHOICES
+from models import FREQUENCY_CHOICES, HABIT_FILE_FIELDS
 
 load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 
@@ -312,6 +312,76 @@ def _owned_habit(habit_id):
     return query, habit
 
 
+def _parse_habit_file(payload):
+    """Validate a single exported habit completely before any database write."""
+    reader = csv.DictReader(io.StringIO(payload.decode("utf-8-sig"), newline=""), strict=True)
+    if reader.fieldnames != HABIT_FILE_FIELDS:
+        raise ValueError("The file must contain the exported habit columns in order.")
+
+    details = None
+    completed_dates = []
+    for row in reader:
+        if None in row or any(value is None for value in row.values()):
+            raise ValueError("Every row must contain all habit columns.")
+        current = {field: row[field] for field in HABIT_FILE_FIELDS if field != "completed_date"}
+        if details is not None and current != details:
+            raise ValueError("All rows must describe the same habit.")
+        details = current
+        if row["completed_date"]:
+            completed = date.fromisoformat(row["completed_date"])
+            if completed.isoformat() != row["completed_date"]:
+                raise ValueError("Completion dates must use YYYY-MM-DD.")
+            if row["completed_date"] not in completed_dates:
+                completed_dates.append(row["completed_date"])
+
+    if details is None:
+        raise ValueError("The file contains no habit.")
+    if not details["name"].strip():
+        raise ValueError("Enter a habit name.")
+    if not details["target"].isdigit() or int(details["target"]) < 1:
+        raise ValueError("Target must be a positive whole number.")
+    if details["frequency"] not in FREQUENCY_CHOICES:
+        raise ValueError("Choose a supported frequency.")
+    created_at = details["created_at"]
+    if created_at:
+        created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at = created_at.astimezone(timezone.utc)
+    else:
+        created_at = datetime.now(timezone.utc)
+    return {
+        "name": details["name"],
+        "description": details["description"],
+        "target": int(details["target"]),
+        "frequency": details["frequency"],
+        "created_at": created_at,
+        "completed_dates": completed_dates,
+    }
+
+
+@app.route("/habits/import", methods=["POST"])
+def import_habit():
+    """Import a .habit attachment as a new habit owned by the signed-in user."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+    upload = request.files.get("file")
+    if upload is None or not upload.filename or not upload.filename.lower().endswith(".habit"):
+        abort(400, description="Choose a .habit file to import.")
+    # Bound memory use while still allowing large completion histories.
+    payload = upload.stream.read(1024 * 1024 + 1)
+    if len(payload) > 1024 * 1024:
+        abort(400, description="Habit files must be no larger than 1 MB.")
+    try:
+        habit = _parse_habit_file(payload)
+    except (UnicodeError, ValueError, csv.Error) as error:
+        abort(400, description=f"Invalid habit file: {error}")
+    habit["user_email"] = session["user_email"]
+    get_db()["habits"].insert_one(habit)
+    flash("Habit imported successfully.", "success")
+    return redirect(url_for("habit_dashboard"))
+
+
 @app.route("/habits/<habit_id>/export")
 def export_habit(habit_id):
     """Download an owned habit and its completion history as UTF-8 CSV."""
@@ -328,10 +398,7 @@ def export_habit(habit_id):
 
     output = io.StringIO(newline="")
     writer = csv.writer(output)
-    writer.writerow([
-        "habit_id", "name", "description", "target", "frequency",
-        "created_at", "completed_date",
-    ])
+    writer.writerow(HABIT_FILE_FIELDS)
     details = [
         str(habit["_id"]), habit.get("name", ""), habit.get("description") or "",
         habit.get("target", ""), habit.get("frequency", ""),

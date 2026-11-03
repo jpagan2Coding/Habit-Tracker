@@ -68,6 +68,15 @@
 
     <!-- Main Dashboard Area -->
     <div class="min-w-0 flex-1">
+        <form action="{{ url_for('import_habit') }}" method="post" enctype="multipart/form-data"
+            class="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
+            <label for="habit-file" class="font-medium text-slate-700">Import habit</label>
+            <input id="habit-file" name="file" type="file" accept=".habit" required
+                class="text-sm text-slate-600">
+            <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700">
+                Import
+            </button>
+        </form>
 
 
         <!-- Top header -->
