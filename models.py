@@ -1,4 +1,3 @@
-FREQUENCY_CHOICES = ("daily", "weekly", "monthly")
 
 # Ordered CSV columns shared by .habit imports and exports.
 HABIT_FILE_FIELDS = [
@@ -11,3 +10,5 @@ HABIT_FILE_FIELDS = [
     "completed_date",
     "status",
 ]
+
+FREQUENCY_CHOICES = ("daily", "weekly", "monthly")

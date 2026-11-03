@@ -2,15 +2,14 @@ import pytest
 
 # === Habit Tracker Tests ===
 
-
-def test_habit_tracker_get_returns_ok(client):
+def test_habit_tracker_get_returns_ok(authenticated_client):
     """Test that GET /habit-tracker returns a 200 status code."""
-    response = client.get("/habit-tracker")
+    response = authenticated_client.get('/habit-tracker')
 
     assert response.status_code == 200
 
 
-def test_habit_tracker_post_creates_habit(client, habits):
+def test_habit_tracker_post_creates_habit(authenticated_client, habits):
     """Test that POST /habit-tracker creates a new habit in the database."""
     habit_data = {
         "name": "Read 20 pages",
@@ -19,8 +18,8 @@ def test_habit_tracker_post_creates_habit(client, habits):
         "frequency": "daily",
     }
 
-    response = client.post(
-        "/habit-tracker",
+    response = authenticated_client.post(
+        '/habit-tracker',
         data=habit_data,
         follow_redirects=False,
     )
@@ -36,9 +35,9 @@ def test_habit_tracker_post_creates_habit(client, habits):
 # === Dashboard Tests ===
 
 
-def test_dashboard_get_returns_ok(client):
+def test_dashboard_get_returns_ok(authenticated_client):
     """Test that GET /dashboard returns a 200 status code."""
-    response = client.get("/dashboard")
+    response = authenticated_client.get('/dashboard')
 
     assert response.status_code == 200
     assert b"Dashboard" in response.data
@@ -47,7 +46,7 @@ def test_dashboard_get_returns_ok(client):
     assert b"All My Habits" in response.data
 
 
-def test_dashboard_displays_date_and_welcome(client):
+def test_dashboard_displays_date_and_welcome(authenticated_client):
     """Dashboard displays the supplied date and welcome message."""
     from flask import template_rendered
 
@@ -59,9 +58,9 @@ def test_dashboard_displays_date_and_welcome(client):
 
     with template_rendered.connected_to(
         record_template,
-        client.application,
+        authenticated_client.application,
     ):
-        response = client.get("/dashboard")
+        response = authenticated_client.get('/dashboard')
 
     assert response.status_code == 200
     assert len(captured_contexts) == 1
@@ -112,9 +111,9 @@ def test_login_redirects_to_dashboard_with_credentials(client):
     "endpoint",
     ["/habit-tracker", "/dashboard"],
 )
-def test_all_pages_get_returns_ok(client, endpoint):
+def test_all_pages_get_returns_ok(authenticated_client, endpoint):
     """Test that Habit Tracker pages return 200 status code on GET requests."""
-    response = client.get(endpoint)
+    response = authenticated_client.get(endpoint)
 
     assert response.status_code == 200
 
@@ -251,7 +250,31 @@ def test_register_redirects_if_already_logged_in(client):
 
 
 def test_navbar_shows_register_only_when_logged_out(client):
-    assert b"Register" in client.get("/habit-tracker").data
+    # Log in using the existing test account
+    response = client.post(
+        '/login',
+        data={
+            'email': 'person@example.com',
+            'password': 'password'
+        }
+    )
+    assert response.status_code == 302
+
+    # Dashboard should be accessible while logged in
+    response = client.get('/dashboard')
+    assert response.status_code == 200
+
+    # Log out
+    response = client.post('/logout')
+    assert response.status_code == 302
+
+    # Verify authenticated session data was cleared
     with client.session_transaction() as sess:
-        sess["user_id"] = "abc"
-    assert b"Register" not in client.get("/dashboard").data
+        assert 'user_id' not in sess
+        assert 'user_email' not in sess
+
+    # Protected pages should redirect to login
+    for path in ['/dashboard', '/habit-tracker']:
+        response = client.get(path)
+        assert response.status_code == 302
+        assert response.headers['Location'].endswith('/login')

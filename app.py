@@ -3,6 +3,7 @@ import io
 import os
 import secrets
 from datetime import date, datetime, timedelta, timezone
+from functools import wraps
 from pathlib import Path
 
 import certifi
@@ -31,6 +32,13 @@ load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("user_id") or not session.get("user_email"):
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated_function
 
 def _mongo_client_options(mongo_uri):
     """Connection options for MongoClient.
@@ -92,6 +100,7 @@ def login():
 
             stored_password = user.get("password", "") if user else ""
             if user and check_password_hash(stored_password, password):
+                session.clear()
                 session["user_id"] = str(user.get("_id", ""))
                 session["username"] = user.get("username", email)
                 session["user_email"] = email
@@ -108,6 +117,7 @@ def login():
 
 
 @app.route("/habit-tracker", methods=["GET", "POST"])
+@login_required
 def habit_tracker():
     form = {"name": "", "description": "", "target": "", "frequency": ""}
     errors = []
@@ -185,6 +195,7 @@ def is_due_today(habit, today):
 
 
 @app.route("/dashboard")
+@login_required
 def habit_dashboard():
     habits = list(
         get_db()["habits"].find({"user_email": session.get("user_email")}).sort("created_at", -1)
