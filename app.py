@@ -1,6 +1,7 @@
+import csv
+import io
 import os
-import secrets
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -8,9 +9,11 @@ import certifi
 from bson import ObjectId
 from dotenv import load_dotenv
 from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
+from flask import Flask, flash, redirect, render_template, request, send_file, session, url_for
 from pymongo import ASCENDING, MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 
 from models import FREQUENCY_CHOICES
 from progress import (
@@ -184,6 +187,37 @@ def habit_tracker():
         frequency_choices=FREQUENCY_CHOICES,
     ), (400 if errors else 200)
 
+# Habits with these statuses don't show up on the "today" list
+INACTIVE_STATUSES = ("paused", "archived", "expired")
+
+
+def _period_start(frequency, today):
+    # start of the current day / week (Monday) / month
+    if frequency == "weekly":
+        return today - timedelta(days=today.weekday())
+    if frequency == "monthly":
+        return today.replace(day=1)
+    return today
+
+
+def is_due_today(habit, today):
+    """Check if a habit should show up on today's list."""
+    if habit.get("status", "active") in INACTIVE_STATUSES:
+        return False
+
+    today_iso = today.isoformat()
+    completed = {d for d in habit.get("completed_dates", []) if isinstance(d, str)}
+
+    # keep habits finished today on the list so they show as done
+    if today_iso in completed:
+        return True
+
+    # reminder: add skipped habits here once Skip a Habit / Undo Habit Completion are done
+
+    # due until the target is hit for this period
+    start_iso = _period_start(habit.get("frequency") or "daily", today).isoformat()
+    completed_this_period = sum(1 for d in completed if start_iso <= d <= today_iso)
+    return completed_this_period < (habit.get("target") or 1)
 
 @app.route("/dashboard")
 def habit_dashboard():
@@ -208,12 +242,14 @@ def habit_dashboard():
         habits, end_date=today_date, period_days=progress_period
     )
 
+    todays_habits = [habit for habit in habits if is_due_today(habit, today_date)]
+
     completion_by_id = {
         habit["id"]: today in habit.get("completed_dates", [])
         for habit in habits
     }
 
-    completed_today = sum(completion_by_id.values())
+    completed_today = sum(completion_by_id[habit["id"]] for habit in todays_habits)
 
     total_habits = len(habits)
     scheduled_today = sum(is_scheduled_on(habit, today_date) for habit in habits)
@@ -238,6 +274,7 @@ def habit_dashboard():
         "apps/habit_tracker/dashboard.html",
         page_id="dashboard",
         habits=habits,
+        todays_habits=todays_habits,
         completion_by_id=completion_by_id,
         total_habits=total_habits,
         completed_today=completed_today,
@@ -539,5 +576,28 @@ def delete_habit(habit_id):
         habit_id=habit_id,
         habit_csrf_token=_habit_form_token(),
     )
+
+
+@app.route("/account/delete-data", methods=["GET", "POST"])
+def delete_account_data():
+    """Wipe the user's habits (and the completion history stored on them) but keep the account."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    query = {"user_email": session["user_email"]}
+
+    if request.method == "POST":
+        _validate_habit_form_token()
+        get_db()["habits"].delete_many(query)
+        flash("All of your habit data has been deleted.", "success")
+        return redirect(url_for("habit_dashboard"))
+
+    return render_template(
+        "account/delete_data.html",
+        habit_count=get_db()["habits"].count_documents(query),
+        habit_csrf_token=_habit_form_token(),
+    )
+
+
 if __name__ == "__main__":
     app.run(debug=True)
