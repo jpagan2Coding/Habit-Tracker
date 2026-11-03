@@ -43,7 +43,8 @@
 
 .summary-card,
 .habit-row,
-.habit-table-card {
+.habit-table-card,
+.progress-card {
     box-shadow: 0 2px 7px rgba(15, 23, 42, 0.08);
 }
 

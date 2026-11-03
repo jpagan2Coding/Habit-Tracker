@@ -95,6 +95,65 @@
 
 
             <div class="flex items-center gap-3">
+                <div class="relative">
+                    <button type="button" id="notification-bell"
+                            class="relative rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+                            aria-label="Notifications" aria-expanded="false"
+                            aria-controls="notification-dropdown">
+                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M15 17h5l-1.5-2v-4a6.5 6.5 0 00-13 0v4L4 17h5m6 0a3 3 0 01-6 0"></path>
+                        </svg>
+                        {% if unread_notification_count %}
+                        <span class="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-950 px-1 text-xs font-bold text-white"
+                              aria-label="{{ unread_notification_count }} unread notifications">
+                            {{ unread_notification_count }}
+                        </span>
+                        {% endif %}
+                    </button>
+                    <div id="notification-dropdown"
+                         class="absolute right-0 z-10 mt-2 hidden w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-lg"
+                         role="region" aria-label="Recent notifications">
+                        <div class="mb-2 flex items-center justify-between">
+                            <h2 class="font-semibold text-slate-900">Notifications</h2>
+                            {% if notifications %}
+                            <button type="button" id="mark-all-notifications"
+                                    class="text-xs font-medium text-indigo-700 hover:text-indigo-900">
+                                Mark all read
+                            </button>
+                            {% endif %}
+                        </div>
+                        <div id="notification-list" class="max-h-80 space-y-2 overflow-y-auto">
+                            {% if notifications %}
+                            {% for notification in notifications %}
+                            <div class="notification-item rounded-lg p-2 {% if not notification.read_at %}bg-indigo-50{% endif %}"
+                                 data-notification-id="{{ notification._id }}">
+                                <a href="{{ notification.url }}"
+                                   class="block text-left {% if not notification.read_at %}font-semibold{% endif %}"
+                                   data-notification-link>
+                                    <span class="block text-sm text-slate-700">{{ notification.habit_name }}</span>
+                                    <span class="block text-xs text-slate-500">{{ notification.message }}</span>
+                                    <time class="mt-1 block text-xs text-slate-400"
+                                          datetime="{{ notification.created_at.isoformat() }}">
+                                        {{ notification.created_at.strftime("%Y-%m-%d %H:%M") }}
+                                    </time>
+                                </a>
+                                {% if not notification.read_at %}
+                                <button type="button" data-mark-notification-read
+                                        class="mt-1 text-xs font-medium text-indigo-700 hover:text-indigo-900">
+                                    Mark read
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                            {% else %}
+                            <p class="py-4 text-center text-sm text-slate-500">
+                                No notifications yet.
+                            </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
                 <span
                     class="hidden h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-700 sm:flex">
                     U
@@ -219,6 +278,54 @@
                 </article>
             </section>
 
+            <!-- Overall Progress -->
+            <section class="progress-card mb-6 rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
+                <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-900">Overall Progress</h2>
+                        <p class="mt-1 text-slate-500">Track your habit completion</p>
+                    </div>
+                    <form method="get" action="{{ url_for('habit_dashboard') }}">
+                        <label for="progress-period" class="sr-only">Progress period</label>
+                        <select id="progress-period" name="period"
+                                onchange="this.form.submit()"
+                                class="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+                            {% for period in progress_periods %}
+                            <option value="{{ period }}" {% if overall_progress.period_days == period %}selected{% endif %}>
+                                Last {{ period }} days
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                </div>
+
+                {% if overall_progress.scheduled %}
+                <div class="mt-6 flex items-baseline gap-2">
+                    <span class="text-3xl font-bold text-slate-900">{{ overall_progress.percentage }}%</span>
+                    <span class="text-slate-500">Completion rate</span>
+                </div>
+                <div class="mt-4 h-3 overflow-hidden rounded-full bg-slate-100"
+                     role="progressbar" aria-valuenow="{{ overall_progress.percentage }}"
+                     aria-valuemin="0" aria-valuemax="100"
+                     aria-label="Overall completion percentage">
+                    <div class="h-full rounded-full bg-blue-950"
+                         style="--progress-percentage: {{ overall_progress.percentage }}; width: calc(var(--progress-percentage) * 1%);"></div>
+                </div>
+                <div class="mt-3 flex justify-between text-sm text-slate-500">
+                    <span>{{ overall_progress.completed }} completed</span>
+                    <span>{{ overall_progress.scheduled }} scheduled</span>
+                </div>
+                {% else %}
+                <p class="mt-6 text-slate-500">
+                    No habits were scheduled during the selected period.
+                </p>
+                {% endif %}
+
+                <p class="mt-5 text-xs text-slate-400">
+                    Skipped, missed, and undone occurrences count as scheduled but incomplete.
+                </p>
+            </section>
+
 
             <!-- Today's Habits -->
             <section class="mb-6">
@@ -276,6 +383,11 @@
                                         class="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
                                         {{ habit.frequency }}
                                     </span>
+                                    {% if habit.reminder_enabled and habit.reminder_time %}
+                                    <span class="text-xs font-medium text-slate-500">
+                                        Reminder {{ habit.reminder_time }}
+                                    </span>
+                                    {% endif %}
 
                                     {% if is_skipped %}
                                     <span
@@ -554,4 +666,13 @@ document.querySelectorAll(".complete-habit-form").forEach(form => {
     });
 });
 </script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    window.habitNotificationConfig = {
+        csrfToken: JSON.parse('{{ habit_csrf_token|tojson }}')
+    };
+</script>
+<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
 {% endblock %}

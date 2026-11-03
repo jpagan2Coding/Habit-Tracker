@@ -212,3 +212,6 @@ CLAUDE.md
 .claude/
 
 *.env
+
+private_key.pem
+public_key.pem

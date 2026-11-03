@@ -9,6 +9,9 @@ UPDATED_FORM = {
     "description": "Walk after dinner",
     "target": "2",
     "frequency": "weekly",
+    "reminder_enabled": "on",
+    "reminder_time": "08:00",
+    "reminder_timezone": "UTC",
 }
 
 
@@ -73,6 +76,8 @@ def test_edit_updates_existing_habit_without_duplicate(client, habits, owned_hab
     assert updated["user_email"] == original["user_email"]
     assert updated["created_at"] == original["created_at"]
     assert updated["completed_dates"] == original["completed_dates"]
+    assert updated["reminder_enabled"] is True
+    assert updated["reminder_time"] == "08:00"
     assert b"Evening Walk" in response.data
     assert b"Morning Walk" not in response.data
 
