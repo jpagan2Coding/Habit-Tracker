@@ -540,7 +540,8 @@ def mark_all_notifications_read():
         {"$set": {"read_at": datetime.utcnow()}},
     )
     return {"ok": True}
-  
+
+
 def _parse_habit_file(payload):
     """Validate a single exported habit completely before any database write."""
     reader = csv.DictReader(io.StringIO(payload.decode("utf-8-sig"), newline=""), strict=True)
