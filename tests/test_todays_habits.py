@@ -70,7 +70,7 @@ def _add_habit(habits, name, **fields):
             "description": None,
             "target": 1,
             "frequency": "daily",
-            "user_email": None,
+            "user_email": "person@example.com",
             "created_at": datetime.utcnow(),
             "completed_dates": [],
             **fields,
@@ -83,13 +83,13 @@ def _todays_section(html):
     return html[html.index("Today's Habits"):html.index("All My Habits")]
 
 
-def test_dashboard_lists_only_habits_due_today(client, habits):
+def test_dashboard_lists_only_habits_due_today(authenticated_client, habits):
     today = datetime.utcnow().date().isoformat()
     _add_habit(habits, "Drink water")
     _add_habit(habits, "Paused habit", status="paused")
     _add_habit(habits, "Done for the month", frequency="monthly", completed_dates=[today])
 
-    response = client.get("/dashboard")
+    response = authenticated_client.get("/dashboard")
     todays = _todays_section(response.get_data(as_text=True))
 
     assert "Drink water" in todays
@@ -97,29 +97,29 @@ def test_dashboard_lists_only_habits_due_today(client, habits):
     assert "Paused habit" not in todays
 
 
-def test_completed_habit_looks_different(client, habits):
+def test_completed_habit_looks_different(authenticated_client, habits):
     today = datetime.utcnow().date().isoformat()
     _add_habit(habits, "Finished habit", completed_dates=[today])
 
-    response = client.get("/dashboard")
+    response = authenticated_client.get("/dashboard")
     todays = _todays_section(response.get_data(as_text=True))
 
     assert "line-through" in todays
     assert "Completed" in todays
 
 
-def test_message_when_nothing_scheduled_today(client, habits):
+def test_message_when_nothing_scheduled_today(authenticated_client, habits):
     _add_habit(habits, "Paused habit", status="paused")
 
-    response = client.get("/dashboard")
+    response = authenticated_client.get("/dashboard")
     html = response.get_data(as_text=True)
 
     assert "Nothing scheduled for today" in html
     assert "No habits yet" not in html
 
 
-def test_new_user_still_sees_no_habits_yet(client):
-    response = client.get("/dashboard")
+def test_new_user_still_sees_no_habits_yet(authenticated_client):
+    response = authenticated_client.get("/dashboard")
     html = response.get_data(as_text=True)
 
     assert "No habits yet" in html

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Settings | Habit Tracker{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/habit-tracker.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-2xl">
+    <a href="{{ url_for('habit_dashboard') }}"
+       class="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900">
+        ← Back to Dashboard
+    </a>
+
+    <section class="rounded-xl border border-slate-200 bg-white p-6 sm:p-8">
+        <h1 class="text-2xl font-bold text-slate-900">Settings</h1>
+        <p class="mt-1 text-sm text-slate-500">These settings are saved in this browser.</p>
+
+        <form method="POST" action="{{ url_for('settings') }}" class="mt-6">
+            <fieldset>
+                <legend class="mb-2 block text-sm font-semibold text-slate-700">Text size</legend>
+
+                <div class="space-y-2">
+                    {% for value, label in text_sizes.items() %}
+                    <label class="flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 {% if value == text_size %}border-indigo-300 bg-indigo-50 font-semibold text-indigo-700{% else %}border-slate-300 text-slate-700 hover:bg-slate-50{% endif %}">
+                        <input type="radio" name="text_size" value="{{ value }}" {% if value == text_size %}checked{% endif %}>
+                        {{ label }}
+                    </label>
+                    {% endfor %}
+                </div>
+            </fieldset>
+
+            <div class="flex justify-end gap-3 pt-6">
+                <button type="submit" name="reset" value="1"
+                        class="rounded-lg border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50">
+                    Reset to default
+                </button>
+                <button type="submit"
+                        class="rounded-lg bg-blue-950 px-6 py-3 font-semibold text-white hover:bg-blue-900">
+                    Save
+                </button>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}
