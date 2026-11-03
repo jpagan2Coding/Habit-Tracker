@@ -49,6 +49,7 @@ def habits(mongo_client):
     """
     return mongo_client["Habit-Tracker_test"]["habits"]
 
+
 @pytest.fixture
 def client(app):
     """
@@ -61,6 +62,7 @@ def client(app):
         Flask test client instance
     """
     return app.test_client()
+
 
 @pytest.fixture
 def authenticated_client(client):

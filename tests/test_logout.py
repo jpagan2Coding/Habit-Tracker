@@ -1,4 +1,3 @@
-
 from app import app
 
 
@@ -30,4 +29,3 @@ def test_logout_without_login():
 
         # Logging out without a session should not crash
         assert response.status_code == 302
-

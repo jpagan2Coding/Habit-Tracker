@@ -51,9 +51,7 @@ def test_edit_form_shows_current_values(client, owned_habit):
     assert f'action="/habits/{owned_habit}/edit"'.encode() in response.data
 
 
-def test_edit_updates_existing_habit_without_duplicate(
-    client, habits, owned_habit
-):
+def test_edit_updates_existing_habit_without_duplicate(client, habits, owned_habit):
     original = habits.find_one({"_id": owned_habit})
     token = form_token(client, owned_habit)
 
@@ -91,9 +89,7 @@ def test_edit_updates_existing_habit_without_duplicate(
         ("frequency", "yearly"),
     ],
 )
-def test_invalid_edit_does_not_change_habit(
-    client, habits, owned_habit, field, value
-):
+def test_invalid_edit_does_not_change_habit(client, habits, owned_habit, field, value):
     original = habits.find_one({"_id": owned_habit})
     token = form_token(client, owned_habit)
 
@@ -121,9 +117,7 @@ def test_leaving_edit_form_does_not_save(client, habits, owned_habit):
     assert habits.find_one({"_id": owned_habit}) == original
 
 
-def test_delete_removes_habit_and_shows_empty_state(
-    client, habits, owned_habit
-):
+def test_delete_removes_habit_and_shows_empty_state(client, habits, owned_habit):
     token = form_token(client, owned_habit)
 
     response = client.post(
@@ -140,9 +134,7 @@ def test_delete_removes_habit_and_shows_empty_state(
 
 @pytest.mark.parametrize("action", ["edit", "delete"])
 @pytest.mark.parametrize("token", [None, "incorrect-token"])
-def test_mutation_requires_valid_csrf_token(
-    client, habits, owned_habit, action, token
-):
+def test_mutation_requires_valid_csrf_token(client, habits, owned_habit, action, token):
     form_token(client, owned_habit)
     original = habits.find_one({"_id": owned_habit})
     data = dict(UPDATED_FORM)
@@ -161,9 +153,7 @@ def test_mutation_requires_valid_csrf_token(
 
 @pytest.mark.parametrize("action", ["edit", "delete"])
 @pytest.mark.parametrize("method", ["get", "post"])
-def test_other_user_cannot_access_or_modify_habit(
-    client, habits, owned_habit, action, method
-):
+def test_other_user_cannot_access_or_modify_habit(client, habits, owned_habit, action, method):
     token = form_token(client, owned_habit)
     original = habits.find_one({"_id": owned_habit})
 
@@ -173,11 +163,7 @@ def test_other_user_cannot_access_or_modify_habit(
 
     response = getattr(client, method)(
         f"/habits/{owned_habit}/{action}",
-        **(
-            {"data": {**UPDATED_FORM, "csrf_token": token}}
-            if method == "post"
-            else {}
-        ),
+        **({"data": {**UPDATED_FORM, "csrf_token": token}} if method == "post" else {}),
     )
 
     assert response.status_code == 404
@@ -186,17 +172,13 @@ def test_other_user_cannot_access_or_modify_habit(
 
 @pytest.mark.parametrize("action", ["edit", "delete"])
 @pytest.mark.parametrize("method", ["get", "post"])
-def test_logged_out_user_is_redirected_to_login(
-    client, habits, owned_habit, action, method
-):
+def test_logged_out_user_is_redirected_to_login(client, habits, owned_habit, action, method):
     original = habits.find_one({"_id": owned_habit})
 
     with client.session_transaction() as session:
         session.clear()
 
-    response = getattr(client, method)(
-        f"/habits/{owned_habit}/{action}"
-    )
+    response = getattr(client, method)(f"/habits/{owned_habit}/{action}")
 
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/login")

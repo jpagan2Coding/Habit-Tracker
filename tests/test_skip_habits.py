@@ -4,7 +4,6 @@ import pytest
 
 from app import is_due_today
 
-
 OWNER_EMAIL = "person@example.com"
 
 # a Wednesday (that week is Mon 11/2 - Sun 11/8)
@@ -50,10 +49,11 @@ def form_token(client):
 
 def todays_section(response):
     html = response.get_data(as_text=True)
-    return html[html.index("Today's Habits"):html.index("All My Habits")]
+    return html[html.index("Today's Habits") : html.index("All My Habits")]
 
 
 # scheduling rules
+
 
 def test_skipped_habit_stays_on_todays_list():
     habit = make_habit(skipped_dates=["2026-11-04"])
@@ -72,6 +72,7 @@ def test_inactive_habit_with_skip_is_not_due(status):
 
 
 # skip action
+
 
 def test_scheduled_habit_has_skip_action(client, habit_id):
     todays = todays_section(client.get("/dashboard"))
@@ -155,6 +156,7 @@ def test_habit_not_scheduled_today_cannot_be_skipped(client, habits, logged_in):
 
 # progress rule: skipped habits are neutral
 
+
 def test_skipped_habit_drops_out_of_todays_progress(client, habits, logged_in):
     habits.insert_one(make_habit("Done", completed_dates=[today_iso()]))
     habits.insert_one(make_habit("Skipped", skipped_dates=[today_iso()]))
@@ -175,10 +177,9 @@ def test_all_habits_skipped_shows_zero_progress(client, habits, logged_in):
 
 # undo skip
 
+
 def test_undo_skip_returns_habit_to_incomplete(client, habits, logged_in):
-    habit_id = habits.insert_one(
-        make_habit(skipped_dates=["2026-10-01", today_iso()])
-    ).inserted_id
+    habit_id = habits.insert_one(make_habit(skipped_dates=["2026-10-01", today_iso()])).inserted_id
     token = form_token(client)
 
     response = client.post(
@@ -195,6 +196,7 @@ def test_undo_skip_returns_habit_to_incomplete(client, habits, logged_in):
 
 
 # access control
+
 
 @pytest.mark.parametrize("action", ["skip", "unskip"])
 @pytest.mark.parametrize("token", [None, "incorrect-token"])
