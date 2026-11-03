@@ -49,6 +49,7 @@ def habits(mongo_client):
     """
     return mongo_client["Habit-Tracker_test"]["habits"]
 
+
 @pytest.fixture
 def client(app):
     """

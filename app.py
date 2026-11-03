@@ -64,9 +64,7 @@ def ensure_user_indexes(users):
     seeded for the login story may not have a username field.
     """
     users.create_index([("email", ASCENDING)], unique=True, name="email_unique")
-    users.create_index(
-        [("username", ASCENDING)], unique=True, sparse=True, name="username_unique"
-    )
+    users.create_index([("username", ASCENDING)], unique=True, sparse=True, name="username_unique")
 
 
 @app.route("/")
@@ -153,6 +151,7 @@ def habit_tracker():
         frequency_choices=FREQUENCY_CHOICES,
     ), (400 if errors else 200)
 
+
 # Habits with these statuses don't show up on the "today" list
 INACTIVE_STATUSES = ("paused", "archived", "expired")
 
@@ -184,12 +183,11 @@ def is_due_today(habit, today):
     completed_this_period = sum(1 for d in completed if start_iso <= d <= today_iso)
     return completed_this_period < (habit.get("target") or 1)
 
+
 @app.route("/dashboard")
 def habit_dashboard():
     habits = list(
-        get_db()["habits"]
-        .find({"user_email": session.get("user_email")})
-        .sort("created_at", -1)
+        get_db()["habits"].find({"user_email": session.get("user_email")}).sort("created_at", -1)
     )
     for habit in habits:
         habit["id"] = str(habit["_id"])
@@ -199,15 +197,9 @@ def habit_dashboard():
 
     todays_habits = [habit for habit in habits if is_due_today(habit, today_date)]
 
-    completion_by_id = {
-        habit["id"]: today in habit.get("completed_dates", [])
-        for habit in habits
-    }
+    completion_by_id = {habit["id"]: today in habit.get("completed_dates", []) for habit in habits}
 
-    skipped_by_id = {
-        habit["id"]: today in habit.get("skipped_dates", [])
-        for habit in habits
-    }
+    skipped_by_id = {habit["id"]: today in habit.get("skipped_dates", []) for habit in habits}
 
     completed_today = sum(completion_by_id[habit["id"]] for habit in todays_habits)
     skipped_today = sum(skipped_by_id[habit["id"]] for habit in todays_habits)
@@ -277,9 +269,7 @@ def register():
 
         flash(error, "error")
 
-    return render_template(
-        "auth/register.html", page_id="register", username=username, email=email
-    )
+    return render_template("auth/register.html", page_id="register", username=username, email=email)
 
 
 def _create_user(users, username, email, password):
@@ -333,6 +323,7 @@ def _duplicate_user_error(users, username, email):
 def logout():
     session.clear()
     return redirect(url_for("home"))  # change to login once implemented
+
 
 def _habit_form_token():
     token = session.get("habit_form_token")
@@ -478,11 +469,13 @@ def export_habit(habit_id):
     for history_date, status in history or [("", "")]:
         if isinstance(history_date, datetime):
             history_date = history_date.date().isoformat()
-        writer.writerow({
-            **details,
-            "completed_date": history_date,
-            "status": status,
-        })
+        writer.writerow(
+            {
+                **details,
+                "completed_date": history_date,
+                "status": status,
+            }
+        )
 
     filename = secure_filename(habit.get("name", ""))[:80] or "habit"
     response = send_file(
@@ -512,10 +505,7 @@ def edit_habit(habit_id):
 
     if request.method == "POST":
         _validate_habit_form_token()
-        form = {
-            key: request.form.get(key, "").strip()
-            for key in form
-        }
+        form = {key: request.form.get(key, "").strip() for key in form}
 
         if not form["name"]:
             errors.append("Enter a name for your habit.")
