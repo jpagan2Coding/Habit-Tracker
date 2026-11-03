@@ -1,17 +1,24 @@
 import csv
 import io
 import os
-from datetime import date, datetime, timezone, timedelta
+import secrets
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-import secrets
-
-from bson import ObjectId
-from flask import abort
-
 import certifi
+from bson import ObjectId
 from dotenv import load_dotenv
-from flask import Flask, flash, redirect, render_template, request, send_file, session, url_for
+from flask import (
+    Flask,
+    abort,
+    flash,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    session,
+    url_for,
+)
 from pymongo import ASCENDING, MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.security import check_password_hash, generate_password_hash
