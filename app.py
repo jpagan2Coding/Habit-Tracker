@@ -333,6 +333,7 @@ def _duplicate_user_error(users, username, email):
         pass
     return "That email or username is already in use."
 
+
 # text size options (cookie value -> label shown on the settings page)
 TEXT_SIZES = {
     "small": "Small",
@@ -366,9 +367,7 @@ def settings():
             response.delete_cookie(TEXT_SIZE_COOKIE)
         else:
             # remember the choice in this browser for a year
-            response.set_cookie(
-                TEXT_SIZE_COOKIE, size, max_age=60 * 60 * 24 * 365, samesite="Lax"
-            )
+            response.set_cookie(TEXT_SIZE_COOKIE, size, max_age=60 * 60 * 24 * 365, samesite="Lax")
         return response
 
     return render_template(
@@ -376,6 +375,7 @@ def settings():
         page_id="settings",
         text_sizes=TEXT_SIZES,
     )
+
 
 @app.route("/logout", methods=["POST"])
 def logout():
@@ -457,6 +457,8 @@ def complete_habit(habit_id):
             "message": "Habit marked as complete",
         }
     ), 200
+
+
 def _parse_habit_file(payload):
     """Validate a single exported habit completely before any database write."""
     reader = csv.DictReader(io.StringIO(payload.decode("utf-8-sig"), newline=""), strict=True)
