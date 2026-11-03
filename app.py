@@ -1,5 +1,7 @@
+import csv
+import io
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import secrets
@@ -9,10 +11,11 @@ from flask import abort
 
 import certifi
 from dotenv import load_dotenv
-from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask import Flask, flash, redirect, render_template, request, send_file, session, url_for
 from pymongo import ASCENDING, MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 
 from models import FREQUENCY_CHOICES
 
@@ -307,6 +310,48 @@ def _owned_habit(habit_id):
     if habit is None:
         abort(404)
     return query, habit
+
+
+@app.route("/habits/<habit_id>/export")
+def export_habit(habit_id):
+    """Download an owned habit and its completion history as UTF-8 CSV."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    _, habit = _owned_habit(habit_id)
+    created_at = habit.get("created_at")
+    if isinstance(created_at, datetime):
+        # MongoDB returns naive UTC datetimes unless tz_aware is enabled.
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at = created_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow([
+        "habit_id", "name", "description", "target", "frequency",
+        "created_at", "completed_date",
+    ])
+    details = [
+        str(habit["_id"]), habit.get("name", ""), habit.get("description") or "",
+        habit.get("target", ""), habit.get("frequency", ""),
+        created_at or "",
+    ]
+    for completed_date in habit.get("completed_dates") or [""]:
+        if isinstance(completed_date, datetime):
+            completed_date = completed_date.date().isoformat()
+        writer.writerow([*details, completed_date])
+
+    filename = secure_filename(habit.get("name", ""))[:80] or "habit"
+    response = send_file(
+        io.BytesIO(output.getvalue().encode("utf-8")),
+        mimetype="text/csv; charset=utf-8",
+        as_attachment=True,
+        download_name=f"{filename}-{habit_id}.habit",
+        max_age=0,
+    )
+    response.headers["Cache-Control"] = "private, no-store"
+    return response
 
 
 @app.route("/habits/<habit_id>/edit", methods=["GET", "POST"])

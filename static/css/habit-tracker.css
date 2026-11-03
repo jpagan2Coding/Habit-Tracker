@@ -2,6 +2,32 @@
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
+.habit-export-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #c7d2fe;
+    border-radius: 0.5rem;
+    background: #eef2ff;
+    color: #3730a3;
+    font-size: 0.875rem;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.habit-export-button:hover {
+    background: #e0e7ff;
+    border-color: #a5b4fc;
+}
+
+.habit-export-button:focus-visible {
+    outline: 3px solid #6366f1;
+    outline-offset: 3px;
+}
+
 .dashboard-shell {
     margin: -2rem -1rem;
     background: #f5f7fb;
