@@ -1,1 +1,1 @@
-FREQUENCY_CHOICES = ('daily', 'weekly', 'monthly')
+FREQUENCY_CHOICES = ("daily", "weekly", "monthly")

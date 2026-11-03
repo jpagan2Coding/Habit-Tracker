@@ -22,6 +22,7 @@ def make_habit(frequency="daily", target=1, completed_dates=None, status=None):
 
 # scheduling rules
 
+
 def test_daily_habit_is_due_today():
     assert is_due_today(make_habit("daily"), TODAY)
 
@@ -63,6 +64,7 @@ def test_inactive_habits_are_not_due(status):
 
 # dashboard
 
+
 def _add_habit(habits, name, **fields):
     habits.insert_one(
         {
@@ -80,7 +82,7 @@ def _add_habit(habits, name, **fields):
 
 def _todays_section(html):
     # just the "Today's Habits" part of the page
-    return html[html.index("Today's Habits"):html.index("All My Habits")]
+    return html[html.index("Today's Habits") : html.index("All My Habits")]
 
 
 def test_dashboard_lists_only_habits_due_today(authenticated_client, habits):

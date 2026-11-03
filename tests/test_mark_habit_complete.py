@@ -1,7 +1,6 @@
-
 """Tests for the Mark Habit as Complete feature."""
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from bson import ObjectId
@@ -22,16 +21,18 @@ def logged_in_client(client):
 @pytest.fixture
 def test_habit(habits):
     """Create a habit owned by the test user."""
-    result = habits.insert_one({
-        "name": "Drink Water",
-        "description": "Drink more water",
-        "frequency": "daily",
-        "target": 1,
-        "user_email": "person@example.com",
-        "created_at": datetime.now(timezone.utc),
-        "completed_dates": [],
-        "status": "active",
-    })
+    result = habits.insert_one(
+        {
+            "name": "Drink Water",
+            "description": "Drink more water",
+            "frequency": "daily",
+            "target": 1,
+            "user_email": "person@example.com",
+            "created_at": datetime.now(timezone.utc),
+            "completed_dates": [],
+            "status": "active",
+        }
+    )
     return str(result.inserted_id)
 
 
@@ -72,16 +73,16 @@ def test_logged_out_user_cannot_complete(client, test_habit):
     assert response.status_code == 401
 
 
-def test_cannot_complete_another_users_habit(
-    logged_in_client, habits
-):
-    result = habits.insert_one({
-        "name": "Private Habit",
-        "user_email": "another@example.com",
-        "frequency": "daily",
-        "target": 1,
-        "completed_dates": [],
-    })
+def test_cannot_complete_another_users_habit(logged_in_client, habits):
+    result = habits.insert_one(
+        {
+            "name": "Private Habit",
+            "user_email": "another@example.com",
+            "frequency": "daily",
+            "target": 1,
+            "completed_dates": [],
+        }
+    )
 
     response = complete(logged_in_client, str(result.inserted_id))
 
@@ -97,12 +98,8 @@ def test_invalid_habit_id(logged_in_client):
     assert response.status_code == 404
 
 
-@pytest.mark.parametrize("status", [
-    "paused", "archived", "expired"
-])
-def test_inactive_habit_cannot_be_completed(
-    logged_in_client, habits, test_habit, status
-):
+@pytest.mark.parametrize("status", ["paused", "archived", "expired"])
+def test_inactive_habit_cannot_be_completed(logged_in_client, habits, test_habit, status):
     habits.update_one(
         {"_id": ObjectId(test_habit)},
         {"$set": {"status": status}},
@@ -114,25 +111,19 @@ def test_inactive_habit_cannot_be_completed(
 
 
 def test_missing_csrf_token(logged_in_client, test_habit):
-    response = logged_in_client.post(
-        f"/habits/{test_habit}/complete"
-    )
+    response = logged_in_client.post(f"/habits/{test_habit}/complete")
 
     assert response.status_code == 400
 
 
 def test_invalid_csrf_token(logged_in_client, test_habit):
-    response = complete(
-        logged_in_client, test_habit, token="wrong-token"
-    )
+    response = complete(logged_in_client, test_habit, token="wrong-token")
 
     assert response.status_code == 400
 
 
 @pytest.mark.parametrize("frequency", ["weekly", "monthly"])
-def test_target_already_reached(
-    logged_in_client, habits, test_habit, frequency
-):
+def test_target_already_reached(logged_in_client, habits, test_habit, frequency):
     today = datetime.now(timezone.utc).date()
     yesterday = today - timedelta(days=1)
 
@@ -142,11 +133,13 @@ def test_target_already_reached(
 
     habits.update_one(
         {"_id": ObjectId(test_habit)},
-        {"$set": {
-            "frequency": frequency,
-            "target": 1,
-            "completed_dates": [yesterday.isoformat()],
-        }},
+        {
+            "$set": {
+                "frequency": frequency,
+                "target": 1,
+                "completed_dates": [yesterday.isoformat()],
+            }
+        },
     )
 
     response = complete(logged_in_client, test_habit)
@@ -162,9 +155,7 @@ def test_target_already_reached(
     assert len(habit["completed_dates"]) == 1
 
 
-def test_dashboard_updates_after_completion(
-    logged_in_client, habits, test_habit
-):
+def test_dashboard_updates_after_completion(logged_in_client, habits, test_habit):
     """Verify the dashboard reflects a completed habit."""
 
     # Check the dashboard before completion
@@ -216,19 +207,19 @@ def test_completing_skipped_habit_replaces_skip(logged_in_client, habits, test_h
     assert habit["skipped_dates"] == []
 
 
-def test_completing_skipped_habit_keeps_progress_at_most_100(
-    logged_in_client, habits, test_habit
-):
+def test_completing_skipped_habit_keeps_progress_at_most_100(logged_in_client, habits, test_habit):
     today = datetime.now(timezone.utc).date().isoformat()
-    habits.insert_one({
-        "name": "Stretch",
-        "frequency": "daily",
-        "target": 1,
-        "user_email": "person@example.com",
-        "created_at": datetime.now(timezone.utc),
-        "completed_dates": [],
-        "skipped_dates": [today],
-    })
+    habits.insert_one(
+        {
+            "name": "Stretch",
+            "frequency": "daily",
+            "target": 1,
+            "user_email": "person@example.com",
+            "created_at": datetime.now(timezone.utc),
+            "completed_dates": [],
+            "skipped_dates": [today],
+        }
+    )
     stretch = habits.find_one({"name": "Stretch"})["_id"]
 
     complete(logged_in_client, test_habit)

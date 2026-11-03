@@ -13,13 +13,13 @@ from flask import (
     Flask,
     abort,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
     send_file,
     session,
     url_for,
-    jsonify
 )
 from pymongo import ASCENDING, MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
@@ -33,13 +33,16 @@ load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get("user_id") or not session.get("user_email"):
             return redirect(url_for("login"))
         return f(*args, **kwargs)
+
     return decorated_function
+
 
 def _mongo_client_options(mongo_uri):
     """Connection options for MongoClient.
@@ -73,9 +76,7 @@ def ensure_user_indexes(users):
     seeded for the login story may not have a username field.
     """
     users.create_index([("email", ASCENDING)], unique=True, name="email_unique")
-    users.create_index(
-        [("username", ASCENDING)], unique=True, sparse=True, name="username_unique"
-    )
+    users.create_index([("username", ASCENDING)], unique=True, sparse=True, name="username_unique")
 
 
 @app.route("/")
@@ -164,6 +165,7 @@ def habit_tracker():
         frequency_choices=FREQUENCY_CHOICES,
     ), (400 if errors else 200)
 
+
 # Habits with these statuses don't show up on the "today" list
 INACTIVE_STATUSES = ("paused", "archived", "expired")
 
@@ -195,13 +197,12 @@ def is_due_today(habit, today):
     completed_this_period = sum(1 for d in completed if start_iso <= d <= today_iso)
     return completed_this_period < (habit.get("target") or 1)
 
+
 @app.route("/dashboard")
 @login_required
 def habit_dashboard():
     habits = list(
-        get_db()["habits"]
-        .find({"user_email": session.get("user_email")})
-        .sort("created_at", -1)
+        get_db()["habits"].find({"user_email": session.get("user_email")}).sort("created_at", -1)
     )
     for habit in habits:
         habit["id"] = str(habit["_id"])
@@ -211,15 +212,9 @@ def habit_dashboard():
 
     todays_habits = [habit for habit in habits if is_due_today(habit, today_date)]
 
-    completion_by_id = {
-        habit["id"]: today in habit.get("completed_dates", [])
-        for habit in habits
-    }
+    completion_by_id = {habit["id"]: today in habit.get("completed_dates", []) for habit in habits}
 
-    skipped_by_id = {
-        habit["id"]: today in habit.get("skipped_dates", [])
-        for habit in habits
-    }
+    skipped_by_id = {habit["id"]: today in habit.get("skipped_dates", []) for habit in habits}
 
     completed_today = sum(completion_by_id[habit["id"]] for habit in todays_habits)
     skipped_today = sum(skipped_by_id[habit["id"]] for habit in todays_habits)
@@ -289,9 +284,7 @@ def register():
 
         flash(error, "error")
 
-    return render_template(
-        "auth/register.html", page_id="register", username=username, email=email
-    )
+    return render_template("auth/register.html", page_id="register", username=username, email=email)
 
 
 def _create_user(users, username, email, password):
@@ -346,6 +339,7 @@ def logout():
     session.clear()
     return redirect(url_for("home"))  # change to login once implemented
 
+
 def _habit_form_token():
     token = session.get("habit_form_token")
     if not token:
@@ -373,6 +367,7 @@ def _owned_habit(habit_id):
     if habit is None:
         abort(404)
     return query, habit
+
 
 @app.route("/habits/<habit_id>/complete", methods=["POST"])
 def complete_habit(habit_id):
@@ -411,12 +406,14 @@ def complete_habit(habit_id):
     if result.modified_count == 0:
         return jsonify({"error": "Completion not recorded"}), 409
 
-    return jsonify({
-        "habit_id": habit_id,
-        "completed": True,
-        "completed_date": today_str,
-        "message": "Habit marked as complete",
-    }), 200
+    return jsonify(
+        {
+            "habit_id": habit_id,
+            "completed": True,
+            "completed_date": today_str,
+            "message": "Habit marked as complete",
+        }
+    ), 200
 
 
 @app.route("/habits/<habit_id>/export")
@@ -435,13 +432,24 @@ def export_habit(habit_id):
 
     output = io.StringIO(newline="")
     writer = csv.writer(output)
-    writer.writerow([
-        "habit_id", "name", "description", "target", "frequency",
-        "created_at", "completed_date", "status",
-    ])
+    writer.writerow(
+        [
+            "habit_id",
+            "name",
+            "description",
+            "target",
+            "frequency",
+            "created_at",
+            "completed_date",
+            "status",
+        ]
+    )
     details = [
-        str(habit["_id"]), habit.get("name", ""), habit.get("description") or "",
-        habit.get("target", ""), habit.get("frequency", ""),
+        str(habit["_id"]),
+        habit.get("name", ""),
+        habit.get("description") or "",
+        habit.get("target", ""),
+        habit.get("frequency", ""),
         created_at or "",
     ]
     history = [(d, "completed") for d in habit.get("completed_dates") or []]
@@ -479,10 +487,7 @@ def edit_habit(habit_id):
 
     if request.method == "POST":
         _validate_habit_form_token()
-        form = {
-            key: request.form.get(key, "").strip()
-            for key in form
-        }
+        form = {key: request.form.get(key, "").strip() for key in form}
 
         if not form["name"]:
             errors.append("Enter a name for your habit.")
