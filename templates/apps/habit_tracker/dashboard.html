@@ -174,6 +174,7 @@
 
                     <p class="mt-1 text-sm text-slate-400">
                         Out of {{ scheduled_today }} · {{ completion_percentage }}%
+                        {% if skipped_today %} · {{ skipped_today }} skipped{% endif %}
                     </p>
                 </article>
 
@@ -226,6 +227,7 @@
                 <div class="space-y-3">
                     {% for habit in todays_habits %}
                     {% set is_completed = completion_by_id[habit.id] %}
+                    {% set is_skipped = skipped_by_id[habit.id] %}
 
 
                     <article class="habit-row rounded-xl border border-slate-200 bg-white p-4">
@@ -240,6 +242,14 @@
                                         d="M5 13l4 4L19 7"></path>
                                 </svg>
                             </div>
+                            {% elif is_skipped %}
+                            <div
+                                class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M13 5l7 7-7 7M5 5l7 7-7 7"></path>
+                                </svg>
+                            </div>
                             {% else %}
                             <div class="h-11 w-11 shrink-0 rounded-full border-2 border-slate-300"></div>
                             {% endif %}
@@ -248,7 +258,7 @@
                             <div class="min-w-0 flex-1">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <h3
-                                        class="text-lg font-bold {% if is_completed %}text-slate-400 line-through{% else %}text-slate-900{% endif %}">
+                                        class="text-lg font-bold {% if is_completed %}text-slate-400 line-through{% elif is_skipped %}text-slate-500{% else %}text-slate-900{% endif %}">
                                         {{ habit.name }}
                                     </h3>
 
@@ -257,6 +267,13 @@
                                         class="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
                                         {{ habit.frequency }}
                                     </span>
+
+                                    {% if is_skipped %}
+                                    <span
+                                        class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                                        Skipped today
+                                    </span>
+                                    {% endif %}
                                 </div>
 
 
@@ -278,6 +295,8 @@
                                     <span class="w-20 text-right text-sm font-medium text-slate-400">
                                         {% if is_completed %}
                                         Completed
+                                        {% elif is_skipped %}
+                                        Skipped
                                         {% else %}
                                         0%
                                         {% endif %}
@@ -288,6 +307,23 @@
 
                             <!-- Habit actions -->
                             <div class="flex flex-wrap items-center gap-2">
+                                {% if is_skipped %}
+                                <form method="POST" action="{{ url_for('unskip_habit', habit_id=habit.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
+                                    <button type="submit"
+                                            class="rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50">
+                                        Undo skip
+                                    </button>
+                                </form>
+                                {% elif not is_completed %}
+                                <form method="POST" action="{{ url_for('skip_habit', habit_id=habit.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
+                                    <button type="submit"
+                                            class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+                                        Skip
+                                    </button>
+                                </form>
+                                {% endif %}
                                 {% include 'apps/habit_tracker/_export_button.html' %}
                                 <a href="{{ url_for('edit_habit', habit_id=habit.id) }}"
                                    class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">

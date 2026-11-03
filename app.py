@@ -166,14 +166,13 @@ def is_due_today(habit, today):
 
     today_iso = today.isoformat()
     completed = {d for d in habit.get("completed_dates", []) if isinstance(d, str)}
+    skipped = {d for d in habit.get("skipped_dates", []) if isinstance(d, str)}
 
-    # keep habits finished today on the list so they show as done
-    if today_iso in completed:
+    # keep habits finished or skipped today on the list so they show their status
+    if today_iso in completed or today_iso in skipped:
         return True
 
-    # reminder: add skipped habits here once Skip a Habit / Undo Habit Completion are done
-
-    # due until the target is hit for this period
+    # due until the target is hit for this period (skipped days don't count toward it)
     start_iso = _period_start(habit.get("frequency") or "daily", today).isoformat()
     completed_this_period = sum(1 for d in completed if start_iso <= d <= today_iso)
     return completed_this_period < (habit.get("target") or 1)
@@ -198,10 +197,17 @@ def habit_dashboard():
         for habit in habits
     }
 
-    completed_today = sum(completion_by_id[habit["id"]] for habit in todays_habits)
+    skipped_by_id = {
+        habit["id"]: today in habit.get("skipped_dates", [])
+        for habit in habits
+    }
 
+    completed_today = sum(completion_by_id[habit["id"]] for habit in todays_habits)
+    skipped_today = sum(skipped_by_id[habit["id"]] for habit in todays_habits)
+
+    # Skipped habits are neutral: they drop out of today's progress instead of lowering it
     total_habits = len(habits)
-    scheduled_today = len(todays_habits)
+    scheduled_today = len(todays_habits) - skipped_today
 
     completion_percentage = (
         round((completed_today / scheduled_today) * 100) if scheduled_today else 0
@@ -213,10 +219,13 @@ def habit_dashboard():
         habits=habits,
         todays_habits=todays_habits,
         completion_by_id=completion_by_id,
+        skipped_by_id=skipped_by_id,
         total_habits=total_habits,
         completed_today=completed_today,
+        skipped_today=skipped_today,
         scheduled_today=scheduled_today,
         completion_percentage=completion_percentage,
+        # Not built yet. Team rule: a skipped day neither breaks nor extends a streak.
         current_streak=None,
         today=today,
         habit_csrf_token=_habit_form_token(),
@@ -349,7 +358,7 @@ def _owned_habit(habit_id):
 
 @app.route("/habits/<habit_id>/export")
 def export_habit(habit_id):
-    """Download an owned habit and its completion history as UTF-8 CSV."""
+    """Download an owned habit and its completion and skip history as UTF-8 CSV."""
     if not session.get("user_id") or not session.get("user_email"):
         return redirect(url_for("login"))
 
@@ -365,17 +374,19 @@ def export_habit(habit_id):
     writer = csv.writer(output)
     writer.writerow([
         "habit_id", "name", "description", "target", "frequency",
-        "created_at", "completed_date",
+        "created_at", "completed_date", "status",
     ])
     details = [
         str(habit["_id"]), habit.get("name", ""), habit.get("description") or "",
         habit.get("target", ""), habit.get("frequency", ""),
         created_at or "",
     ]
-    for completed_date in habit.get("completed_dates") or [""]:
-        if isinstance(completed_date, datetime):
-            completed_date = completed_date.date().isoformat()
-        writer.writerow([*details, completed_date])
+    history = [(d, "completed") for d in habit.get("completed_dates") or []]
+    history += [(d, "skipped") for d in habit.get("skipped_dates") or []]
+    for history_date, status in history or [("", "")]:
+        if isinstance(history_date, datetime):
+            history_date = history_date.date().isoformat()
+        writer.writerow([*details, history_date, status])
 
     filename = secure_filename(habit.get("name", ""))[:80] or "habit"
     response = send_file(
@@ -474,6 +485,44 @@ def delete_habit(habit_id):
         habit_id=habit_id,
         habit_csrf_token=_habit_form_token(),
     )
+
+
+@app.route("/habits/<habit_id>/skip", methods=["POST"])
+def skip_habit(habit_id):
+    """Mark an owned habit as skipped for today."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    query, habit = _owned_habit(habit_id)
+    _validate_habit_form_token()
+
+    today_date = datetime.utcnow().date()
+    today = today_date.isoformat()
+    if today in habit.get("completed_dates", []):
+        flash("This habit is already completed today, so it can't be skipped.", "error")
+    elif not is_due_today(habit, today_date):
+        flash("This habit isn't scheduled for today.", "error")
+    else:
+        # completed and skipped are mutually exclusive for a given day
+        get_db()["habits"].update_one(
+            {**query, "completed_dates": {"$ne": today}},
+            {"$addToSet": {"skipped_dates": today}},
+        )
+    return redirect(url_for("habit_dashboard"))
+
+
+@app.route("/habits/<habit_id>/unskip", methods=["POST"])
+def unskip_habit(habit_id):
+    """Undo today's skip so the habit is incomplete again."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    query, _ = _owned_habit(habit_id)
+    _validate_habit_form_token()
+
+    today = datetime.utcnow().date().isoformat()
+    get_db()["habits"].update_one(query, {"$pull": {"skipped_dates": today}})
+    return redirect(url_for("habit_dashboard"))
 
 
 @app.route("/account/delete-data", methods=["GET", "POST"])
