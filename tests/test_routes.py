@@ -2,9 +2,10 @@ import pytest
 
 # === Habit Tracker Tests ===
 
+
 def test_habit_tracker_get_returns_ok(authenticated_client):
     """Test that GET /habit-tracker returns a 200 status code."""
-    response = authenticated_client.get('/habit-tracker')
+    response = authenticated_client.get("/habit-tracker")
 
     assert response.status_code == 200
 
@@ -19,7 +20,7 @@ def test_habit_tracker_post_creates_habit(authenticated_client, habits):
     }
 
     response = authenticated_client.post(
-        '/habit-tracker',
+        "/habit-tracker",
         data=habit_data,
         follow_redirects=False,
     )
@@ -37,7 +38,7 @@ def test_habit_tracker_post_creates_habit(authenticated_client, habits):
 
 def test_dashboard_get_returns_ok(authenticated_client):
     """Test that GET /dashboard returns a 200 status code."""
-    response = authenticated_client.get('/dashboard')
+    response = authenticated_client.get("/dashboard")
 
     assert response.status_code == 200
     assert b"Dashboard" in response.data
@@ -60,7 +61,7 @@ def test_dashboard_displays_date_and_welcome(authenticated_client):
         record_template,
         authenticated_client.application,
     ):
-        response = authenticated_client.get('/dashboard')
+        response = authenticated_client.get("/dashboard")
 
     assert response.status_code == 200
     assert len(captured_contexts) == 1
@@ -251,30 +252,24 @@ def test_register_redirects_if_already_logged_in(client):
 
 def test_navbar_shows_register_only_when_logged_out(client):
     # Log in using the existing test account
-    response = client.post(
-        '/login',
-        data={
-            'email': 'person@example.com',
-            'password': 'password'
-        }
-    )
+    response = client.post("/login", data={"email": "person@example.com", "password": "password"})
     assert response.status_code == 302
 
     # Dashboard should be accessible while logged in
-    response = client.get('/dashboard')
+    response = client.get("/dashboard")
     assert response.status_code == 200
 
     # Log out
-    response = client.post('/logout')
+    response = client.post("/logout")
     assert response.status_code == 302
 
     # Verify authenticated session data was cleared
     with client.session_transaction() as sess:
-        assert 'user_id' not in sess
-        assert 'user_email' not in sess
+        assert "user_id" not in sess
+        assert "user_email" not in sess
 
     # Protected pages should redirect to login
-    for path in ['/dashboard', '/habit-tracker']:
+    for path in ["/dashboard", "/habit-tracker"]:
         response = client.get(path)
         assert response.status_code == 302
-        assert response.headers['Location'].endswith('/login')
+        assert response.headers["Location"].endswith("/login")

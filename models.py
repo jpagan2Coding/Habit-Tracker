@@ -1,4 +1,3 @@
-
 # Ordered CSV columns shared by .habit imports and exports.
 HABIT_FILE_FIELDS = [
     "habit_id",

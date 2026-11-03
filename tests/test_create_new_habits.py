@@ -8,6 +8,7 @@ VALID_HABIT = {
 
 # Acceptance criterion 1: a complete habit is saved and shows on the dashboard
 
+
 def test_create_new_habit_saves_all_fields(authenticated_client, habits):
     response = authenticated_client.post("/habit-tracker", data=VALID_HABIT)
 
@@ -27,6 +28,7 @@ def test_saved_habit_appears_on_dashboard(authenticated_client):
 
 # Acceptance criterion 2: a missing required field means nothing is saved
 
+
 def test_missing_name_does_not_create_habit(authenticated_client, habits):
     response = authenticated_client.post("/habit-tracker", data={**VALID_HABIT, "name": "   "})
 
@@ -35,14 +37,14 @@ def test_missing_name_does_not_create_habit(authenticated_client, habits):
 
 
 def test_missing_target_does_not_create_habit(authenticated_client, habits):
-    response = authenticated_client.post("/habit-tracker", data={**VALID_HABIT, 'target': ''})
+    response = authenticated_client.post("/habit-tracker", data={**VALID_HABIT, "target": ""})
 
     assert response.status_code == 400
     assert habits.count_documents({}) == 0
 
 
 def test_missing_frequency_does_not_create_habit(authenticated_client, habits):
-    response = authenticated_client.post('/habit-tracker', data={**VALID_HABIT, 'frequency': ''})
+    response = authenticated_client.post("/habit-tracker", data={**VALID_HABIT, "frequency": ""})
 
     assert response.status_code == 400
     assert habits.count_documents({}) == 0

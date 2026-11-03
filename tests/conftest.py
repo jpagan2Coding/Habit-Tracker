@@ -63,6 +63,7 @@ def client(app):
     """
     return app.test_client()
 
+
 @pytest.fixture
 def authenticated_client(client):
     """Provide a test client with an authenticated session."""

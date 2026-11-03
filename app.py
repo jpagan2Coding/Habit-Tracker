@@ -32,13 +32,16 @@ load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get("user_id") or not session.get("user_email"):
             return redirect(url_for("login"))
         return f(*args, **kwargs)
+
     return decorated_function
+
 
 def _mongo_client_options(mongo_uri):
     """Connection options for MongoClient.
