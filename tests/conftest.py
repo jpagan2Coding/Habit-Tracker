@@ -61,3 +61,13 @@ def client(app):
         Flask test client instance
     """
     return app.test_client()
+
+@pytest.fixture
+def authenticated_client(client):
+    """Provide a test client with an authenticated session."""
+    with client.session_transaction() as sess:
+        sess["user_id"] = "test-user-id"
+        sess["user_email"] = "person@example.com"
+        sess["username"] = "Test User"
+
+    return client

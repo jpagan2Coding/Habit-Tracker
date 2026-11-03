@@ -2,7 +2,6 @@ from datetime import datetime
 
 import pytest
 
-
 OWNER_EMAIL = "person@example.com"
 
 UPDATED_FORM = {
