@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
+<html lang="en" class="scroll-smooth text-size-{{ text_size }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,7 +13,7 @@
     <nav class="bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-100 sticky top-0 z-50">
         <div class="mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
-                <div class="flex items-center">
+                <div class="flex items-center">text-size-{{ text_size }}
                     <a href="/dashboard" class="flex flex-col">
                         <span class="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Habit Tracker</span>
                         <span class="text-xs text-gray-500">Build Your Perfect Habit Tracking App</span>
@@ -25,6 +25,9 @@
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                             Habits
                         </span>
+                    </a>
+                    <a href="{{ url_for('settings') }}" class="px-4 py-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 transition-all duration-200">
+                        Settings
                     </a>
                     {% if not session.get('user_id') %}
                     <a href="{{ url_for('register') }}" class="px-4 py-2 rounded-lg text-gray-600 hover:text-gray-900 
@@ -47,6 +50,7 @@
         <div id="mobileMenu" class="hidden md:hidden bg-white border-t border-gray-100">
             <div class="px-2 pt-2 pb-3 space-y-1">
                 <a href="/habit-tracker" class="block px-3 py-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50">Habit Tracker</a>
+                <a href="{{ url_for('settings') }}" class="block px-3 py-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50">Settings</a>
                 {% if not session.get('user_id') %}
                 <a href="{{ url_for('register') }}" class="block px-3 py-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50">Register</a>
                 {% endif %}
