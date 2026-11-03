@@ -199,3 +199,41 @@ def test_dashboard_updates_after_completion(
     today = datetime.now(timezone.utc).date().isoformat()
 
     assert today in habit["completed_dates"]
+
+
+def test_completing_skipped_habit_replaces_skip(logged_in_client, habits, test_habit):
+    today = datetime.now(timezone.utc).date().isoformat()
+    habits.update_one({"_id": ObjectId(test_habit)}, {"$set": {"skipped_dates": [today]}})
+
+    before_html = logged_in_client.get("/dashboard").get_data(as_text=True)
+    assert "Mark Complete" in before_html
+
+    response = complete(logged_in_client, test_habit)
+
+    assert response.status_code == 200
+    habit = habits.find_one({"_id": ObjectId(test_habit)})
+    assert habit["completed_dates"] == [today]
+    assert habit["skipped_dates"] == []
+
+
+def test_completing_skipped_habit_keeps_progress_at_most_100(
+    logged_in_client, habits, test_habit
+):
+    today = datetime.now(timezone.utc).date().isoformat()
+    habits.insert_one({
+        "name": "Stretch",
+        "frequency": "daily",
+        "target": 1,
+        "user_email": "person@example.com",
+        "created_at": datetime.now(timezone.utc),
+        "completed_dates": [],
+        "skipped_dates": [today],
+    })
+    stretch = habits.find_one({"name": "Stretch"})["_id"]
+
+    complete(logged_in_client, test_habit)
+    complete(logged_in_client, str(stretch))
+
+    html = logged_in_client.get("/dashboard").get_data(as_text=True)
+    assert "Out of 2 · 100%" in html
+    assert "skipped" not in html.split("Out of 2")[1].split("</p>")[0]

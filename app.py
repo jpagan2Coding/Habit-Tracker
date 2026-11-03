@@ -396,12 +396,16 @@ def complete_habit(habit_id):
     if not is_due_today(habit, today):
         return jsonify({"error": "Habit target already reached"}), 409
 
+    # completing a habit skipped today replaces the skip (a day can't be both)
     result = get_db()["habits"].update_one(
         {
             **query,
             "completed_dates": {"$ne": today_str},
         },
-        {"$addToSet": {"completed_dates": today_str}},
+        {
+            "$addToSet": {"completed_dates": today_str},
+            "$pull": {"skipped_dates": today_str},
+        },
     )
 
     if result.modified_count == 0:

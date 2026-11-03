@@ -307,6 +307,20 @@
 
                             <!-- Habit actions -->
                             <div class="flex flex-wrap items-center gap-2">
+                                {% if not is_completed %}
+                                <form class="complete-habit-form"
+                                    action="{{ url_for('complete_habit', habit_id=habit.id) }}"
+                                    method="POST">
+                                    <input type="hidden"
+                                        name="csrf_token"
+                                        value="{{ habit_csrf_token }}">
+
+                                    <button type="submit"
+                                            class="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700">
+                                        Mark Complete
+                                    </button>
+                                </form>
+                                {% endif %}
                                 {% if is_skipped %}
                                 <form method="POST" action="{{ url_for('unskip_habit', habit_id=habit.id) }}">
                                     <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
