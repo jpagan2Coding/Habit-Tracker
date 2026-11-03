@@ -26,7 +26,9 @@ def test_choosing_a_size_saves_it(client, size):
     assert f"text_size={size}" in response.headers["Set-Cookie"]
 
 
-@pytest.mark.parametrize("page", ["/", "/login", "/register", "/dashboard", "/habit-tracker", "/settings"])
+@pytest.mark.parametrize(
+    "page", ["/", "/login", "/register", "/dashboard", "/habit-tracker", "/settings"]
+)
 def test_saved_size_is_applied_on_every_page(client, page):
     client.post("/settings", data={"text_size": "large"})
 
