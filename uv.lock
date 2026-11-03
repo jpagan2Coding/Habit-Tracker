@@ -3038,8 +3038,10 @@ requires-dist = [
 provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
-dev = [{ name = "py-vapid", specifier = ">=1.9.6" }]
-dev = [{ name = "mongomock", specifier = ">=4.3.0" }]
+dev = [
+    { name = "mongomock", specifier = ">=4.3.0" },
+    { name = "py-vapid", specifier = ">=1.9.6" },
+]
 
 [[package]]
 name = "stevedore"
