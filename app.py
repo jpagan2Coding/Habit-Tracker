@@ -13,6 +13,7 @@ from flask import (
     Flask,
     abort,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -332,6 +333,7 @@ def _duplicate_user_error(users, username, email):
         pass
     return "That email or username is already in use."
 
+
 # text size options (cookie value -> label shown on the settings page)
 TEXT_SIZES = {
     "small": "Small",
@@ -365,9 +367,7 @@ def settings():
             response.delete_cookie(TEXT_SIZE_COOKIE)
         else:
             # remember the choice in this browser for a year
-            response.set_cookie(
-                TEXT_SIZE_COOKIE, size, max_age=60 * 60 * 24 * 365, samesite="Lax"
-            )
+            response.set_cookie(TEXT_SIZE_COOKIE, size, max_age=60 * 60 * 24 * 365, samesite="Lax")
         return response
 
     return render_template(
@@ -375,6 +375,7 @@ def settings():
         page_id="settings",
         text_sizes=TEXT_SIZES,
     )
+
 
 @app.route("/logout", methods=["POST"])
 def logout():
@@ -409,6 +410,53 @@ def _owned_habit(habit_id):
     if habit is None:
         abort(404)
     return query, habit
+
+
+@app.route("/habits/<habit_id>/complete", methods=["POST"])
+def complete_habit(habit_id):
+    """Record one daily completion for the authenticated user's habit."""
+
+    if not session.get("user_id") or not session.get("user_email"):
+        return jsonify({"error": "Login required"}), 401
+
+    _validate_habit_form_token()
+
+    query, habit = _owned_habit(habit_id)
+    today = datetime.now(timezone.utc).date()
+    today_str = today.isoformat()
+
+    if habit.get("status", "active") in INACTIVE_STATUSES:
+        return jsonify({"error": "Habit is inactive"}), 409
+
+    if today_str in habit.get("completed_dates", []):
+        return jsonify({"error": "Already completed today"}), 409
+
+    if not is_due_today(habit, today):
+        return jsonify({"error": "Habit target already reached"}), 409
+
+    # completing a habit skipped today replaces the skip (a day can't be both)
+    result = get_db()["habits"].update_one(
+        {
+            **query,
+            "completed_dates": {"$ne": today_str},
+        },
+        {
+            "$addToSet": {"completed_dates": today_str},
+            "$pull": {"skipped_dates": today_str},
+        },
+    )
+
+    if result.modified_count == 0:
+        return jsonify({"error": "Completion not recorded"}), 409
+
+    return jsonify(
+        {
+            "habit_id": habit_id,
+            "completed": True,
+            "completed_date": today_str,
+            "message": "Habit marked as complete",
+        }
+    ), 200
 
 
 def _parse_habit_file(payload):
