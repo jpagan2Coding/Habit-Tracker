@@ -1,16 +1,21 @@
 {% extends "base.html" %}
 
+
 {% block title %}Dashboard | Habit Tracker{% endblock %}
+
 
 {% block extra_head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/habit-tracker.css') }}">
 {% endblock %}
 
+
 {% block content %}
 <div class="dashboard-shell flex">
 
+
     <!-- Sidebar -->
     <aside class="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
+
 
         <nav class="flex-1 px-4 py-7">
             <a
@@ -24,6 +29,7 @@
                 Dashboard
             </a>
 
+
             <a href="{{ url_for('habit_tracker') }}"
                 class="sidebar-link mb-2 flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -32,6 +38,7 @@
                 </svg>
                 My Habits
             </a>
+
 
             <span
                 class="mb-2 flex cursor-not-allowed items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-400">
@@ -43,6 +50,7 @@
             </span>
         </nav>
 
+
         <div class="border-t border-slate-200 p-4">
             <span
                 class="mb-2 flex cursor-not-allowed items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-400">
@@ -53,11 +61,22 @@
                 Settings
             </span>
 
+            <a href="{{ url_for('delete_account_data') }}"
+                class="sidebar-link flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-red-600 hover:bg-red-50">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+                Delete My Data
+            </a>
+
         </div>
     </aside>
 
+
     <!-- Main Dashboard Area -->
     <div class="min-w-0 flex-1">
+
 
         <!-- Top header -->
         <header class="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
@@ -65,11 +84,13 @@
                 Dashboard
             </h1>
 
+
             <div class="flex items-center gap-3">
                 <span
                     class="hidden h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-700 sm:flex">
                     U
                 </span>
+
 
                 <span class="hidden font-semibold text-slate-700 sm:block">
                     User
@@ -77,8 +98,10 @@
             </div>
         </header>
 
+
         <!-- Dashboard content -->
         <main class="dashboard-content-scroll p-5 sm:p-8">
+
 
             <!-- Welcome section -->
             <section class="mb-6 flex flex-col justify-between gap-5 xl:flex-row xl:items-center">
@@ -87,6 +110,7 @@
                         Welcome back!
                     </h2>
 
+
                     <p class="mt-1 text-slate-500">
                         Stay consistent and keep building your habits.
                     </p>
@@ -94,6 +118,7 @@
                         Today: {{ today }}
                     </p>
                 </div>
+
 
                 <a href="{{ url_for('habit_tracker') }}"
                     class="inline-flex w-fit items-center gap-2 rounded-lg bg-blue-950 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-900">
@@ -104,6 +129,7 @@
                 </a>
             </section>
 
+
             <!-- Summary cards -->
             <section class="mb-6 grid gap-5 md:grid-cols-3">
                 <article class="summary-card rounded-xl border border-slate-200 bg-white p-5">
@@ -112,18 +138,22 @@
                         <span class="text-lg font-bold">#</span>
                     </div>
 
+
                     <p class="text-sm font-medium text-slate-500">
                         Total Habits
                     </p>
+
 
                     <p class="mt-2 text-3xl font-bold text-slate-900">
                         {{ total_habits }}
                     </p>
 
+
                     <p class="mt-1 text-sm text-slate-400">
                         Active habits
                     </p>
                 </article>
+
 
                 <article class="summary-card rounded-xl border border-slate-200 bg-white p-5">
                     <div
@@ -131,18 +161,22 @@
                         <span class="text-lg font-bold">#</span>
                     </div>
 
+
                     <p class="text-sm font-medium text-slate-500">
                         Completed Today
                     </p>
+
 
                     <p class="mt-2 text-3xl font-bold text-slate-900">
                         {{ completed_today }}
                     </p>
 
+
                     <p class="mt-1 text-sm text-slate-400">
                         Out of {{ scheduled_today }} · {{ completion_percentage }}%
                     </p>
                 </article>
+
 
                 <article class="summary-card rounded-xl border border-slate-200 bg-white p-5">
                     <div
@@ -150,9 +184,11 @@
                         <span class="text-lg font-bold">#</span>
                     </div>
 
+
                     <p class="text-sm font-medium text-slate-500">
                         Current Streak
                     </p>
+
 
                     <p class="mt-2 text-3xl font-bold text-purple-600">
                         {% if current_streak is not none %}
@@ -161,6 +197,7 @@
                         —
                         {% endif %}
                     </p>
+
 
                     <p class="mt-1 text-sm text-slate-400">
                         {% if current_streak is not none %}
@@ -172,6 +209,7 @@
                 </article>
             </section>
 
+
             <!-- Today's Habits -->
             <section class="mb-6">
                 <div class="mb-4">
@@ -179,18 +217,20 @@
                         Today's Habits
                     </h2>
 
+
                     <p class="mt-1 text-slate-400">
                         Habits you need to complete today
                     </p>
                 </div>
-                {% if habits %}
+                {% if todays_habits %}
                 <div class="space-y-3">
-                    {% for habit in habits %}
+                    {% for habit in todays_habits %}
                     {% set is_completed = completion_by_id[habit.id] %}
 
 
                     <article class="habit-row rounded-xl border border-slate-200 bg-white p-4">
                         <div class="flex flex-col gap-4 lg:flex-row lg:items-center">
+
 
                             {% if is_completed %}
                             <div
@@ -204,6 +244,7 @@
                             <div class="h-11 w-11 shrink-0 rounded-full border-2 border-slate-300"></div>
                             {% endif %}
 
+
                             <div class="min-w-0 flex-1">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <h3
@@ -211,11 +252,13 @@
                                         {{ habit.name }}
                                     </h3>
 
+
                                     <span
                                         class="rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
                                         {{ habit.frequency }}
                                     </span>
                                 </div>
+
 
                                 {% if habit.description %}
                                 <p class="mt-1 text-sm text-slate-500">
@@ -223,12 +266,14 @@
                                 </p>
                                 {% endif %}
 
+
                                 <div class="mt-3 flex items-center gap-3">
                                     <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
                                         <div
                                             class="h-full rounded-full {% if is_completed %}w-full bg-emerald-500{% else %}w-0 bg-blue-900{% endif %}">
                                         </div>
                                     </div>
+
 
                                     <span class="w-20 text-right text-sm font-medium text-slate-400">
                                         {% if is_completed %}
@@ -240,21 +285,29 @@
                                 </div>
                             </div>
 
-                            <!-- Future feature controls -->
-                            <div class="flex gap-2">
-                                <span
-                                    class="cursor-not-allowed rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400">
-                                    Edit
-                                </span>
 
-                                <span
-                                    class="cursor-not-allowed rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-400">
+                            <!-- Habit actions -->
+                            <div class="flex flex-wrap items-center gap-2">
+                                {% include 'apps/habit_tracker/_export_button.html' %}
+                                <a href="{{ url_for('edit_habit', habit_id=habit.id) }}"
+                                   class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
+                                    Edit
+                                </a>
+
+
+                                <a href="{{ url_for('delete_habit', habit_id=habit.id) }}"
+                                   class="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
                                     Delete
-                                </span>
+                                </a>
                             </div>
                         </div>
                     </article>
                     {% endfor %}
+                </div>
+                {% elif habits %}
+                <div class="rounded-xl border-2 border-dashed border-slate-300 bg-white px-6 py-10 text-center">
+                    <h3 class="text-xl font-bold text-slate-900">Nothing scheduled for today</h3>
+                    <p class="mt-2 text-slate-500">You've hit all your targets for now.</p>
                 </div>
                 {% else %}
                 <div class="rounded-xl border-2 border-dashed border-slate-300 bg-white px-6 py-10 text-center">
@@ -263,13 +316,16 @@
                         🌱
                     </div>
 
+
                     <h3 class="text-xl font-bold text-slate-900">
                         No habits yet
                     </h3>
 
+
                     <p class="mx-auto mt-2 max-w-md text-slate-500">
                         Create your first habit to start building a consistent daily routine.
                     </p>
+
 
                     <a href="{{ url_for('habit_tracker') }}"
                         class="mt-6 inline-flex items-center gap-2 rounded-lg bg-blue-950 px-5 py-3 font-semibold text-white transition hover:bg-blue-900">
@@ -279,6 +335,7 @@
                 {% endif %}
             </section>
 
+
             <!-- All My Habits -->
             <section>
                 <div class="mb-4">
@@ -286,10 +343,12 @@
                         All My Habits
                     </h2>
 
+
                     <p class="mt-1 text-slate-400">
-                        All currently active habits
+                        All currently active habits. Export any habit with its full completion history.
                     </p>
                 </div>
+
 
                 <div class="habit-table-card overflow-x-auto rounded-xl border border-slate-200 bg-white">
                     <table class="min-w-full divide-y divide-slate-200">
@@ -300,20 +359,24 @@
                                     Habit
                                 </th>
 
+
                                 <th
                                     class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
                                     Frequency
                                 </th>
+
 
                                 <th
                                     class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
                                     Start Date
                                 </th>
 
+
                                 <th
                                     class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
                                     Status
                                 </th>
+
 
                                 <th
                                     class="px-5 py-4 text-right text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -321,6 +384,7 @@
                                 </th>
                             </tr>
                         </thead>
+
 
                         <tbody class="divide-y divide-slate-100">
                             {% if habits %}
@@ -331,12 +395,14 @@
                                         {{ habit.name }}
                                     </p>
 
+
                                     {% if habit.description %}
                                     <p class="mt-1 max-w-xs truncate text-sm text-slate-400">
                                         {{ habit.description }}
                                     </p>
                                     {% endif %}
                                 </td>
+
 
                                 <td class="px-5 py-4">
                                     <span
@@ -345,9 +411,11 @@
                                     </span>
                                 </td>
 
+
                                 <td class="whitespace-nowrap px-5 py-4 text-sm text-slate-500">
                                     {{ habit.created_at.strftime('%B %d, %Y') }}
                                 </td>
+
 
                                 <td class="px-5 py-4">
                                     <span
@@ -356,17 +424,28 @@
                                     </span>
                                 </td>
 
-                                <td class="px-5 py-4 text-right">
-                                    <div class="flex justify-end gap-2">
-                                        <span
-                                            class="cursor-not-allowed rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-400">
-                                            Edit
-                                        </span>
 
-                                        <span
-                                            class="cursor-not-allowed rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-400">
-                                            Delete
-                                        </span>
+                                <td class="px-5 py-4 text-right">
+                                    <div class="flex flex-wrap items-center justify-end gap-2">
+                                        {% include 'apps/habit_tracker/_export_button.html' %}
+                                        <a href="{{ url_for('edit_habit', habit_id=habit.id) }}"
+                                           class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
+                                            Edit
+                                        </a>
+
+
+                                        <form method="POST"
+      action="{{ url_for('delete_habit', habit_id=habit.id) }}"
+      onsubmit="return window.confirm('Delete this habit? This cannot be undone.');">
+    <input type="hidden"
+           name="csrf_token"
+           value="{{ habit_csrf_token }}">
+
+    <button type="submit"
+            class="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
+        Delete
+    </button>
+</form>
                                     </div>
                                 </td>
                             </tr>

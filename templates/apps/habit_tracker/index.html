@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 
-{% block title %}Create a Habit | Habit Tracker{% endblock %}
+{% block title %}
+{{ 'Edit Habit' if editing else 'Create a Habit' }} | Habit Tracker
+{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/habit-tracker.css') }}">
@@ -14,12 +16,19 @@
     </a>
 
     <section class="rounded-xl border border-slate-200 bg-white p-6 sm:p-8">
-        <h1 class="text-2xl font-bold text-slate-900">Create a New Habit</h1>
-        <p class="mt-1 text-sm text-slate-500">Set what you want to do, how many times, and how often.</p>
+        <h1 class="text-2xl font-bold text-slate-900">
+            {{ 'Edit Habit' if editing else 'Create a New Habit' }}
+        </h1>
+
+        <p class="mt-1 text-sm text-slate-500">
+            {{ 'Update your habit details below.' if editing else 'Set what you want to do, how many times, and how often.' }}
+        </p>
 
         {% if errors %}
         <div class="mt-6 rounded-lg border border-red-200 bg-red-50 p-4" role="alert">
-            <p class="text-sm font-semibold text-red-800">Your habit wasn't saved. Please fix the following:</p>
+            <p class="text-sm font-semibold text-red-800">
+                Your habit wasn't saved. Please fix the following:
+            </p>
             <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-red-700">
                 {% for error in errors %}
                 <li>{{ error }}</li>
@@ -28,39 +37,76 @@
         </div>
         {% endif %}
 
-        <form method="POST" action="{{ url_for('habit_tracker') }}" class="mt-6 space-y-5" novalidate>
+        <form method="POST"
+              action="{{ url_for('edit_habit', habit_id=habit_id) if editing else url_for('habit_tracker') }}"
+              class="mt-6 space-y-5"
+              novalidate>
+
+            {% if editing %}
+            <input type="hidden"
+                   name="csrf_token"
+                   value="{{ habit_csrf_token }}">
+            {% endif %}
+
             <div>
-                <label for="habit-name" class="mb-2 block text-sm font-semibold text-slate-700">Habit *</label>
-                <input type="text" id="habit-name" name="name" value="{{ form.name }}" maxlength="100"
-                    class="w-full rounded-lg border border-slate-300 px-4 py-2.5"
-                    placeholder="e.g., Drink water, Go for a run">
+                <label for="habit-name"
+                       class="mb-2 block text-sm font-semibold text-slate-700">
+                    Habit *
+                </label>
+                <input type="text"
+                       id="habit-name"
+                       name="name"
+                       value="{{ form.name }}"
+                       maxlength="100"
+                       class="w-full rounded-lg border border-slate-300 px-4 py-2.5"
+                       placeholder="e.g., Drink water, Go for a run">
             </div>
 
             <div class="grid gap-5 sm:grid-cols-2">
                 <div>
-                    <label for="habit-target" class="mb-2 block text-sm font-semibold text-slate-700">Target (times) *</label>
-                    <input type="number" id="habit-target" name="target" value="{{ form.target }}" min="1" step="1"
-                        class="w-full rounded-lg border border-slate-300 px-4 py-2.5"
-                        placeholder="e.g., 3">
+                    <label for="habit-target"
+                           class="mb-2 block text-sm font-semibold text-slate-700">
+                        Target (times) *
+                    </label>
+                    <input type="number"
+                           id="habit-target"
+                           name="target"
+                           value="{{ form.target }}"
+                           min="1"
+                           step="1"
+                           class="w-full rounded-lg border border-slate-300 px-4 py-2.5"
+                           placeholder="e.g., 3">
                 </div>
 
                 <div>
-                    <label for="habit-frequency" class="mb-2 block text-sm font-semibold text-slate-700">Frequency *</label>
-                    <select id="habit-frequency" name="frequency"
-                        class="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5">
+                    <label for="habit-frequency"
+                           class="mb-2 block text-sm font-semibold text-slate-700">
+                        Frequency *
+                    </label>
+                    <select id="habit-frequency"
+                            name="frequency"
+                            class="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5">
                         <option value="">Choose one</option>
                         {% for choice in frequency_choices %}
-                        <option value="{{ choice }}" {% if form.frequency == choice %}selected{% endif %}>{{ choice|capitalize }}</option>
+                        <option value="{{ choice }}"
+                                {% if form.frequency == choice %}selected{% endif %}>
+                            {{ choice|capitalize }}
+                        </option>
                         {% endfor %}
                     </select>
                 </div>
             </div>
 
             <div>
-                <label for="habit-description" class="mb-2 block text-sm font-semibold text-slate-700">Notes (optional)</label>
-                <textarea id="habit-description" name="description" rows="3"
-                    class="w-full rounded-lg border border-slate-300 px-4 py-2.5"
-                    placeholder="Why does this habit matter to you?">{{ form.description }}</textarea>
+                <label for="habit-description"
+                       class="mb-2 block text-sm font-semibold text-slate-700">
+                    Notes (optional)
+                </label>
+                <textarea id="habit-description"
+                          name="description"
+                          rows="3"
+                          class="w-full rounded-lg border border-slate-300 px-4 py-2.5"
+                          placeholder="Why does this habit matter to you?">{{ form.description }}</textarea>
             </div>
 
             <div class="flex justify-end gap-3 pt-2">
@@ -68,9 +114,10 @@
                    class="rounded-lg border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50">
                     Cancel
                 </a>
+
                 <button type="submit"
-                    class="rounded-lg bg-blue-950 px-6 py-3 font-semibold text-white hover:bg-blue-900">
-                    Save
+                        class="rounded-lg bg-blue-950 px-6 py-3 font-semibold text-white hover:bg-blue-900">
+                    {{ 'Save Changes' if editing else 'Save' }}
                 </button>
             </div>
         </form>

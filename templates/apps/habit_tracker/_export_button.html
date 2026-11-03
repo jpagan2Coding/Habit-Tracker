@@ -1,0 +1,10 @@
+<a href="{{ url_for('export_habit', habit_id=habit.id) }}"
+   class="habit-export-button"
+   aria-label="Export {{ habit.name }}"
+   title="Download habit details and full completion history (.habit)">
+    <svg aria-hidden="true" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 3v12m-4-4 4 4 4-4M5 16v4h14v-4"></path>
+    </svg>
+    Export
+</a>

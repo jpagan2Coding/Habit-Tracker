@@ -1,13 +1,22 @@
+import csv
+import io
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from functools import wraps
+
+import secrets
+
+from bson import ObjectId
+from flask import abort
+
 import certifi
 from dotenv import load_dotenv
-from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask import Flask, flash, redirect, render_template, request, send_file, session, url_for
 from pymongo import ASCENDING, MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 
 from models import FREQUENCY_CHOICES
 
@@ -147,6 +156,37 @@ def habit_tracker():
         frequency_choices=FREQUENCY_CHOICES,
     ), (400 if errors else 200)
 
+# Habits with these statuses don't show up on the "today" list
+INACTIVE_STATUSES = ("paused", "archived", "expired")
+
+
+def _period_start(frequency, today):
+    # start of the current day / week (Monday) / month
+    if frequency == "weekly":
+        return today - timedelta(days=today.weekday())
+    if frequency == "monthly":
+        return today.replace(day=1)
+    return today
+
+
+def is_due_today(habit, today):
+    """Check if a habit should show up on today's list."""
+    if habit.get("status", "active") in INACTIVE_STATUSES:
+        return False
+
+    today_iso = today.isoformat()
+    completed = {d for d in habit.get("completed_dates", []) if isinstance(d, str)}
+
+    # keep habits finished today on the list so they show as done
+    if today_iso in completed:
+        return True
+
+    # reminder: add skipped habits here once Skip a Habit / Undo Habit Completion are done
+
+    # due until the target is hit for this period
+    start_iso = _period_start(habit.get("frequency") or "daily", today).isoformat()
+    completed_this_period = sum(1 for d in completed if start_iso <= d <= today_iso)
+    return completed_this_period < (habit.get("target") or 1)
 
 @app.route("/dashboard")
 @login_required
@@ -159,17 +199,20 @@ def habit_dashboard():
     for habit in habits:
         habit["id"] = str(habit["_id"])
 
-    today = datetime.utcnow().date().isoformat()
+    today_date = datetime.utcnow().date()
+    today = today_date.isoformat()
+
+    todays_habits = [habit for habit in habits if is_due_today(habit, today_date)]
 
     completion_by_id = {
         habit["id"]: today in habit.get("completed_dates", [])
         for habit in habits
     }
 
-    completed_today = sum(completion_by_id.values())
+    completed_today = sum(completion_by_id[habit["id"]] for habit in todays_habits)
 
     total_habits = len(habits)
-    scheduled_today = total_habits
+    scheduled_today = len(todays_habits)
 
     completion_percentage = (
         round((completed_today / scheduled_today) * 100) if scheduled_today else 0
@@ -179,6 +222,7 @@ def habit_dashboard():
         "apps/habit_tracker/dashboard.html",
         page_id="dashboard",
         habits=habits,
+        todays_habits=todays_habits,
         completion_by_id=completion_by_id,
         total_habits=total_habits,
         completed_today=completed_today,
@@ -186,6 +230,7 @@ def habit_dashboard():
         completion_percentage=completion_percentage,
         current_streak=None,
         today=today,
+        habit_csrf_token=_habit_form_token(),
     )
 
 
@@ -283,6 +328,184 @@ def _duplicate_user_error(users, username, email):
 def logout():
     session.clear()
     return redirect(url_for("home"))  # change to login once implemented
+
+def _habit_form_token():
+    token = session.get("habit_form_token")
+    if not token:
+        token = secrets.token_hex(32)
+        session["habit_form_token"] = token
+    return token
+
+
+def _validate_habit_form_token():
+    expected = session.get("habit_form_token")
+    submitted = request.form.get("csrf_token", "")
+    if not expected or not secrets.compare_digest(expected, submitted):
+        abort(400, description="Invalid form token. Reload the form and try again.")
+
+
+def _owned_habit(habit_id):
+    if not ObjectId.is_valid(habit_id):
+        abort(404)
+
+    query = {
+        "_id": ObjectId(habit_id),
+        "user_email": session["user_email"],
+    }
+    habit = get_db()["habits"].find_one(query)
+    if habit is None:
+        abort(404)
+    return query, habit
+
+
+@app.route("/habits/<habit_id>/export")
+def export_habit(habit_id):
+    """Download an owned habit and its completion history as UTF-8 CSV."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    _, habit = _owned_habit(habit_id)
+    created_at = habit.get("created_at")
+    if isinstance(created_at, datetime):
+        # MongoDB returns naive UTC datetimes unless tz_aware is enabled.
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at = created_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+    output = io.StringIO(newline="")
+    writer = csv.writer(output)
+    writer.writerow([
+        "habit_id", "name", "description", "target", "frequency",
+        "created_at", "completed_date",
+    ])
+    details = [
+        str(habit["_id"]), habit.get("name", ""), habit.get("description") or "",
+        habit.get("target", ""), habit.get("frequency", ""),
+        created_at or "",
+    ]
+    for completed_date in habit.get("completed_dates") or [""]:
+        if isinstance(completed_date, datetime):
+            completed_date = completed_date.date().isoformat()
+        writer.writerow([*details, completed_date])
+
+    filename = secure_filename(habit.get("name", ""))[:80] or "habit"
+    response = send_file(
+        io.BytesIO(output.getvalue().encode("utf-8")),
+        mimetype="text/csv; charset=utf-8",
+        as_attachment=True,
+        download_name=f"{filename}-{habit_id}.habit",
+        max_age=0,
+    )
+    response.headers["Cache-Control"] = "private, no-store"
+    return response
+
+
+@app.route("/habits/<habit_id>/edit", methods=["GET", "POST"])
+def edit_habit(habit_id):
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    query, habit = _owned_habit(habit_id)
+    errors = []
+    form = {
+        "name": habit.get("name", ""),
+        "description": habit.get("description") or "",
+        "target": str(habit.get("target", "")),
+        "frequency": habit.get("frequency", ""),
+    }
+
+    if request.method == "POST":
+        _validate_habit_form_token()
+        form = {
+            key: request.form.get(key, "").strip()
+            for key in form
+        }
+
+        if not form["name"]:
+            errors.append("Enter a name for your habit.")
+        elif len(form["name"]) > 100:
+            errors.append("Habit name must be 100 characters or fewer.")
+
+        try:
+            target = int(form["target"])
+        except ValueError:
+            target = 0
+
+        if target < 1:
+            errors.append("Target must be a whole number of 1 or more.")
+
+        if form["frequency"] not in FREQUENCY_CHOICES:
+            errors.append("Choose a frequency.")
+
+        if not errors:
+            result = get_db()["habits"].update_one(
+                query,
+                {
+                    "$set": {
+                        "name": form["name"],
+                        "description": form["description"] or None,
+                        "target": target,
+                        "frequency": form["frequency"],
+                    }
+                },
+            )
+            if result.matched_count == 0:
+                abort(404)
+            return redirect(url_for("habit_dashboard"))
+
+    return render_template(
+        "apps/habit_tracker/index.html",
+        page_id="habit-tracker",
+        form=form,
+        errors=errors,
+        frequency_choices=FREQUENCY_CHOICES,
+        editing=True,
+        habit_id=habit_id,
+        habit_csrf_token=_habit_form_token(),
+    ), (400 if errors else 200)
+
+
+@app.route("/habits/<habit_id>/delete", methods=["GET", "POST"])
+def delete_habit(habit_id):
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    query, habit = _owned_habit(habit_id)
+
+    if request.method == "POST":
+        _validate_habit_form_token()
+        result = get_db()["habits"].delete_one(query)
+        if result.deleted_count == 0:
+            abort(404)
+        return redirect(url_for("habit_dashboard"))
+
+    return render_template(
+        "apps/habit_tracker/delete.html",
+        habit=habit,
+        habit_id=habit_id,
+        habit_csrf_token=_habit_form_token(),
+    )
+
+
+@app.route("/account/delete-data", methods=["GET", "POST"])
+def delete_account_data():
+    """Wipe the user's habits (and the completion history stored on them) but keep the account."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    query = {"user_email": session["user_email"]}
+
+    if request.method == "POST":
+        _validate_habit_form_token()
+        get_db()["habits"].delete_many(query)
+        flash("All of your habit data has been deleted.", "success")
+        return redirect(url_for("habit_dashboard"))
+
+    return render_template(
+        "account/delete_data.html",
+        habit_count=get_db()["habits"].count_documents(query),
+        habit_csrf_token=_habit_form_token(),
+    )
 
 
 if __name__ == "__main__":
