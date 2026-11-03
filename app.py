@@ -1,17 +1,25 @@
 import csv
 import io
 import os
-from datetime import datetime, timezone, timedelta
+import secrets
+from datetime import datetime, timedelta, timezone
+from functools import wraps
 from pathlib import Path
 
-import secrets
-
-from bson import ObjectId
-from flask import abort
-
 import certifi
+from bson import ObjectId
 from dotenv import load_dotenv
-from flask import Flask, flash, redirect, render_template, request, send_file, session, url_for
+from flask import (
+    Flask,
+    abort,
+    flash,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    session,
+    url_for,
+)
 from pymongo import ASCENDING, MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -24,6 +32,13 @@ load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
 
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get("user_id") or not session.get("user_email"):
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated_function
 
 def _mongo_client_options(mongo_uri):
     """Connection options for MongoClient.
@@ -87,6 +102,7 @@ def login():
 
             stored_password = user.get("password", "") if user else ""
             if user and check_password_hash(stored_password, password):
+                session.clear()
                 session["user_id"] = str(user.get("_id", ""))
                 session["username"] = user.get("username", email)
                 session["user_email"] = email
@@ -103,6 +119,7 @@ def login():
 
 
 @app.route("/habit-tracker", methods=["GET", "POST"])
+@login_required
 def habit_tracker():
     form = {"name": "", "description": "", "target": "", "frequency": ""}
     errors = []
@@ -178,6 +195,7 @@ def is_due_today(habit, today):
     return completed_this_period < (habit.get("target") or 1)
 
 @app.route("/dashboard")
+@login_required
 def habit_dashboard():
     habits = list(
         get_db()["habits"]
