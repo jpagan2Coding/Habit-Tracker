@@ -13,10 +13,7 @@ import pytest
 from bson import ObjectId
 from werkzeug.http import parse_options_header
 
-FIELDS = [
-    'habit_id', 'name', 'description', 'target', 'frequency',
-    'created_at', 'completed_date',
-]
+from models import HABIT_FILE_FIELDS
 
 
 @pytest.fixture
@@ -44,9 +41,9 @@ def export_url(habit):
 def read_export(response):
     assert response.status_code == 200
     reader = csv.DictReader(io.StringIO(response.data.decode('utf-8'), newline=''))
-    assert reader.fieldnames == FIELDS
+    assert reader.fieldnames == HABIT_FILE_FIELDS
     rows = list(reader)
-    assert all(set(row) == set(FIELDS) for row in rows)
+    assert all(set(row) == set(HABIT_FILE_FIELDS) for row in rows)
     return rows
 
 
