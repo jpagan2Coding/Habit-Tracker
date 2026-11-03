@@ -1,7 +1,8 @@
 """Acceptance tests for the GET /habits/<habit_id>/export endpoint.
 
-The .habit attachment contains UTF-8 CSV, with one row per completed date.
-Habits without history still have one row, with an empty completed_date.
+The .habit attachment contains UTF-8 CSV, with one row per completed or skipped
+date; the status column says which. Habits without history still have one row,
+with an empty completed_date and status.
 See docs/HABIT_EXPORT.md for the file contract.
 """
 
@@ -15,7 +16,7 @@ from werkzeug.http import parse_options_header
 
 FIELDS = [
     'habit_id', 'name', 'description', 'target', 'frequency',
-    'created_at', 'completed_date',
+    'created_at', 'completed_date', 'status',
 ]
 
 
@@ -73,7 +74,7 @@ def test_export_contains_all_details_and_entire_completion_history(client, expor
         'created_at': '2026-10-01T14:30:45Z',
     }
     assert rows == [
-        {**expected_details, 'completed_date': date}
+        {**expected_details, 'completed_date': date, 'status': 'completed'}
         for date in export_habit['completed_dates']
     ]
 
@@ -91,6 +92,19 @@ def test_export_preserves_habit_without_history(client, habits, export_habit, hi
     assert rows[0]['habit_id'] == str(export_habit['_id'])
     assert rows[0]['name'] == export_habit['name']
     assert rows[0]['completed_date'] == ''
+    assert rows[0]['status'] == ''
+
+
+def test_export_includes_skipped_days(client, habits, export_habit):
+    habits.update_one({'_id': export_habit['_id']}, {'$set': {'skipped_dates': ['2026-10-03']}})
+
+    rows = read_export(client.get(export_url(export_habit)))
+
+    history = [(row['completed_date'], row['status']) for row in rows]
+    assert history == [
+        *[(date, 'completed') for date in export_habit['completed_dates']],
+        ('2026-10-03', 'skipped'),
+    ]
 
 
 def test_export_round_trips_csv_special_characters_and_unicode(client, habits, export_habit):
