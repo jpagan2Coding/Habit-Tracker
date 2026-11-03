@@ -364,10 +364,15 @@ def _parse_habit_file(payload):
 
     details = None
     completed_dates = []
+    skipped_dates = []
     for row in reader:
         if None in row or any(value is None for value in row.values()):
             raise ValueError("Every row must contain all habit columns.")
-        current = {field: row[field] for field in HABIT_FILE_FIELDS if field != "completed_date"}
+        current = {
+            field: row[field]
+            for field in HABIT_FILE_FIELDS
+            if field not in ("completed_date", "status")
+        }
         if details is not None and current != details:
             raise ValueError("All rows must describe the same habit.")
         details = current
@@ -375,8 +380,17 @@ def _parse_habit_file(payload):
             completed = date.fromisoformat(row["completed_date"])
             if completed.isoformat() != row["completed_date"]:
                 raise ValueError("Completion dates must use YYYY-MM-DD.")
-            if row["completed_date"] not in completed_dates:
-                completed_dates.append(row["completed_date"])
+            status = row["status"] or "completed"
+            if status == "completed":
+                if row["completed_date"] not in completed_dates:
+                    completed_dates.append(row["completed_date"])
+            elif status == "skipped":
+                if row["completed_date"] not in skipped_dates:
+                    skipped_dates.append(row["completed_date"])
+            else:
+                raise ValueError("History status must be completed or skipped.")
+        elif row["status"]:
+            raise ValueError("A history status requires a completion date.")
 
     if details is None:
         raise ValueError("The file contains no habit.")
@@ -401,6 +415,7 @@ def _parse_habit_file(payload):
         "frequency": details["frequency"],
         "created_at": created_at,
         "completed_dates": completed_dates,
+        "skipped_dates": skipped_dates,
     }
 
 
@@ -441,22 +456,26 @@ def export_habit(habit_id):
         created_at = created_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
     output = io.StringIO(newline="")
-    writer = csv.writer(output)
-    writer.writerow([
-        "habit_id", "name", "description", "target", "frequency",
-        "created_at", "completed_date", "status",
-    ])
-    details = [
-        str(habit["_id"]), habit.get("name", ""), habit.get("description") or "",
-        habit.get("target", ""), habit.get("frequency", ""),
-        created_at or "",
-    ]
+    writer = csv.DictWriter(output, fieldnames=HABIT_FILE_FIELDS)
+    writer.writeheader()
+    details = {
+        "habit_id": str(habit["_id"]),
+        "name": habit.get("name", ""),
+        "description": habit.get("description") or "",
+        "target": habit.get("target", ""),
+        "frequency": habit.get("frequency", ""),
+        "created_at": created_at or "",
+    }
     history = [(d, "completed") for d in habit.get("completed_dates") or []]
     history += [(d, "skipped") for d in habit.get("skipped_dates") or []]
     for history_date, status in history or [("", "")]:
         if isinstance(history_date, datetime):
             history_date = history_date.date().isoformat()
-        writer.writerow([*details, history_date, status])
+        writer.writerow({
+            **details,
+            "completed_date": history_date,
+            "status": status,
+        })
 
     filename = secure_filename(habit.get("name", ""))[:80] or "habit"
     response = send_file(

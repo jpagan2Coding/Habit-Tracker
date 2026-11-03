@@ -87,6 +87,20 @@ def test_import_preserves_habit_without_history(import_client, habits, import_ro
     assert habits.find_one()['completed_dates'] == []
 
 
+def test_import_restores_skipped_history(import_client, habits, import_rows):
+    rows = [
+        {**import_rows[0], 'status': 'completed'},
+        {**import_rows[1], 'status': 'skipped'},
+    ]
+
+    response = upload_habit(import_client, encode_habit(rows))
+
+    assert_import_redirect(response)
+    habit = habits.find_one()
+    assert habit['completed_dates'] == ['2026-10-02']
+    assert habit['skipped_dates'] == ['2026-10-05']
+
+
 def test_import_preserves_csv_special_characters_and_unicode(import_client, habits, import_rows):
     details = {'name': 'Lire, "chaque jour" 📚', 'description': 'Café\nChapter 1, "start"\r\n続ける'}
     rows = [{**row, **details} for row in import_rows]
