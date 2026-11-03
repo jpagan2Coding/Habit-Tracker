@@ -394,5 +394,28 @@ def delete_habit(habit_id):
         habit_id=habit_id,
         habit_csrf_token=_habit_form_token(),
     )
+
+
+@app.route("/account/delete-data", methods=["GET", "POST"])
+def delete_account_data():
+    """Wipe the user's habits (and the completion history stored on them) but keep the account."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    query = {"user_email": session["user_email"]}
+
+    if request.method == "POST":
+        _validate_habit_form_token()
+        get_db()["habits"].delete_many(query)
+        flash("All of your habit data has been deleted.", "success")
+        return redirect(url_for("habit_dashboard"))
+
+    return render_template(
+        "account/delete_data.html",
+        habit_count=get_db()["habits"].count_documents(query),
+        habit_csrf_token=_habit_form_token(),
+    )
+
+
 if __name__ == "__main__":
     app.run(debug=True)
