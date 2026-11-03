@@ -52,14 +52,14 @@
 
 
         <div class="border-t border-slate-200 p-4">
-            <span
-                class="mb-2 flex cursor-not-allowed items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-400">
+            <a href="{{ url_for('settings') }}"
+                class="sidebar-link mb-2 flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z"></path>
                 </svg>
                 Settings
-            </span>
+            </a>
 
             <a href="{{ url_for('delete_account_data') }}"
                 class="sidebar-link flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-red-600 hover:bg-red-50">
