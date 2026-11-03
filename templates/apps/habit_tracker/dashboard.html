@@ -61,6 +61,14 @@
                 Settings
             </span>
 
+            <a href="{{ url_for('delete_account_data') }}"
+                class="sidebar-link flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-red-600 hover:bg-red-50">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+                Delete My Data
+            </a>
 
         </div>
     </aside>
@@ -223,9 +231,9 @@
                         Habits you need to complete today
                     </p>
                 </div>
-                {% if habits %}
+                {% if todays_habits %}
                 <div class="space-y-3">
-                    {% for habit in habits %}
+                    {% for habit in todays_habits %}
                     {% set is_completed = completion_by_id[habit.id] %}
 
 
@@ -304,6 +312,11 @@
                         </div>
                     </article>
                     {% endfor %}
+                </div>
+                {% elif habits %}
+                <div class="rounded-xl border-2 border-dashed border-slate-300 bg-white px-6 py-10 text-center">
+                    <h3 class="text-xl font-bold text-slate-900">Nothing scheduled for today</h3>
+                    <p class="mt-2 text-slate-500">You've hit all your targets for now.</p>
                 </div>
                 {% else %}
                 <div class="rounded-xl border-2 border-dashed border-slate-300 bg-white px-6 py-10 text-center">

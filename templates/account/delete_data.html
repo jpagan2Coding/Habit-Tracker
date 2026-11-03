@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Delete My Data | Habit Tracker{% endblock %}
+
+{% block content %}
+<section class="mx-auto max-w-xl rounded-xl border border-slate-200 bg-white p-8">
+    <h1 class="text-2xl font-bold text-slate-900">Delete All My Data?</h1>
+
+    <p class="mt-4 text-slate-600">
+        This permanently deletes all {{ habit_count }} of your habits and their completion history.
+        Your account will stay, so you can keep logging in and start fresh.
+        This cannot be undone.
+    </p>
+
+    <form method="POST"
+          action="{{ url_for('delete_account_data') }}"
+          class="mt-6 flex justify-end gap-3">
+        <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
+
+        <a href="{{ url_for('habit_dashboard') }}"
+           class="rounded-lg border border-slate-300 px-5 py-3 font-semibold text-slate-700">
+            Cancel
+        </a>
+
+        <button type="submit"
+                class="rounded-lg bg-red-600 px-5 py-3 font-semibold text-white hover:bg-red-700">
+            Delete My Data
+        </button>
+    </form>
+</section>
+{% endblock %}
