@@ -42,10 +42,12 @@ def _is_valid_timezone(name):
         return False
     return True
 
+
 load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+
 
 def login_required(f):
     @wraps(f)
@@ -53,7 +55,9 @@ def login_required(f):
         if not session.get("user_id") or not session.get("user_email"):
             return redirect(url_for("login"))
         return f(*args, **kwargs)
+
     return decorated_function
+
 
 def _mongo_client_options(mongo_uri):
     """Connection options for MongoClient.
@@ -87,9 +91,7 @@ def ensure_user_indexes(users):
     seeded for the login story may not have a username field.
     """
     users.create_index([("email", ASCENDING)], unique=True, name="email_unique")
-    users.create_index(
-        [("username", ASCENDING)], unique=True, sparse=True, name="username_unique"
-    )
+    users.create_index([("username", ASCENDING)], unique=True, sparse=True, name="username_unique")
 
 
 @app.route("/")
@@ -206,6 +208,7 @@ def habit_tracker():
         frequency_choices=FREQUENCY_CHOICES,
     ), (400 if errors else 200)
 
+
 # Habits with these statuses don't show up on the "today" list
 INACTIVE_STATUSES = ("paused", "archived", "expired")
 
@@ -237,13 +240,12 @@ def is_due_today(habit, today):
     completed_this_period = sum(1 for d in completed if start_iso <= d <= today_iso)
     return completed_this_period < (habit.get("target") or 1)
 
+
 @app.route("/dashboard")
 @login_required
 def habit_dashboard():
     habits = list(
-        get_db()["habits"]
-        .find({"user_email": session.get("user_email")})
-        .sort("created_at", -1)
+        get_db()["habits"].find({"user_email": session.get("user_email")}).sort("created_at", -1)
     )
     for habit in habits:
         habit["id"] = str(habit["_id"])
@@ -263,15 +265,9 @@ def habit_dashboard():
 
     todays_habits = [habit for habit in habits if is_due_today(habit, today_date)]
 
-    completion_by_id = {
-        habit["id"]: today in habit.get("completed_dates", [])
-        for habit in habits
-    }
+    completion_by_id = {habit["id"]: today in habit.get("completed_dates", []) for habit in habits}
 
-    skipped_by_id = {
-        habit["id"]: today in habit.get("skipped_dates", [])
-        for habit in habits
-    }
+    skipped_by_id = {habit["id"]: today in habit.get("skipped_dates", []) for habit in habits}
 
     completed_today = sum(completion_by_id[habit["id"]] for habit in todays_habits)
     skipped_today = sum(skipped_by_id[habit["id"]] for habit in todays_habits)
@@ -357,9 +353,7 @@ def register():
 
         flash(error, "error")
 
-    return render_template(
-        "auth/register.html", page_id="register", username=username, email=email
-    )
+    return render_template("auth/register.html", page_id="register", username=username, email=email)
 
 
 def _create_user(users, username, email, password):
@@ -408,6 +402,7 @@ def _duplicate_user_error(users, username, email):
         pass
     return "That email or username is already in use."
 
+
 # text size options (cookie value -> label shown on the settings page)
 TEXT_SIZES = {
     "small": "Small",
@@ -441,9 +436,7 @@ def settings():
             response.delete_cookie(TEXT_SIZE_COOKIE)
         else:
             # remember the choice in this browser for a year
-            response.set_cookie(
-                TEXT_SIZE_COOKIE, size, max_age=60 * 60 * 24 * 365, samesite="Lax"
-            )
+            response.set_cookie(TEXT_SIZE_COOKIE, size, max_age=60 * 60 * 24 * 365, samesite="Lax")
         return response
 
     return render_template(
@@ -451,6 +444,7 @@ def settings():
         page_id="settings",
         text_sizes=TEXT_SIZES,
     )
+
 
 @app.route("/logout", methods=["POST"])
 def logout():
@@ -482,6 +476,7 @@ def push_public_key():
     if not public_key:
         return {"error": "Push notifications are not configured."}, 503
     return {"public_key": public_key}
+
 
 def _habit_form_token():
     token = session.get("habit_form_token")
@@ -531,9 +526,7 @@ def mark_notification_read(notification_id):
         return {"error": "Login required."}, 401
     _validate_habit_form_token()
     query, notification = _owned_notification(notification_id)
-    get_db()["notifications"].update_one(
-        query, {"$set": {"read_at": datetime.utcnow()}}
-    )
+    get_db()["notifications"].update_one(query, {"$set": {"read_at": datetime.utcnow()}})
     return {"ok": True, "url": notification.get("url", url_for("habit_dashboard"))}
 
 
@@ -565,13 +558,24 @@ def export_habit(habit_id):
 
     output = io.StringIO(newline="")
     writer = csv.writer(output)
-    writer.writerow([
-        "habit_id", "name", "description", "target", "frequency",
-        "created_at", "completed_date", "status",
-    ])
+    writer.writerow(
+        [
+            "habit_id",
+            "name",
+            "description",
+            "target",
+            "frequency",
+            "created_at",
+            "completed_date",
+            "status",
+        ]
+    )
     details = [
-        str(habit["_id"]), habit.get("name", ""), habit.get("description") or "",
-        habit.get("target", ""), habit.get("frequency", ""),
+        str(habit["_id"]),
+        habit.get("name", ""),
+        habit.get("description") or "",
+        habit.get("target", ""),
+        habit.get("frequency", ""),
         created_at or "",
     ]
     history = [(d, "completed") for d in habit.get("completed_dates") or []]
@@ -612,10 +616,7 @@ def edit_habit(habit_id):
 
     if request.method == "POST":
         _validate_habit_form_token()
-        form = {
-            key: request.form.get(key, "").strip()
-            for key in form
-        }
+        form = {key: request.form.get(key, "").strip() for key in form}
         form["reminder_enabled"] = request.form.get("reminder_enabled") == "on"
 
         if not form["name"]:

@@ -86,9 +86,7 @@ def test_delete_leaves_other_users_data(client, habits, logged_in, seeded_habits
 
 
 @pytest.mark.parametrize("token", [None, "incorrect-token"])
-def test_delete_requires_valid_csrf_token(
-    client, habits, logged_in, seeded_habits, token
-):
+def test_delete_requires_valid_csrf_token(client, habits, logged_in, seeded_habits, token):
     form_token(client)
     data = {} if token is None else {"csrf_token": token}
 
@@ -99,9 +97,7 @@ def test_delete_requires_valid_csrf_token(
 
 
 @pytest.mark.parametrize("method", ["get", "post"])
-def test_logged_out_user_is_redirected_to_login(
-    client, habits, seeded_habits, method
-):
+def test_logged_out_user_is_redirected_to_login(client, habits, seeded_habits, method):
     response = getattr(client, method)("/account/delete-data")
 
     assert response.status_code == 302

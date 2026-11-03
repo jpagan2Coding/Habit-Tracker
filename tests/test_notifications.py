@@ -11,23 +11,25 @@ def _login(client, email=OWNER_EMAIL):
         session["user_email"] = email
 
 
-def test_due_reminder_creates_persistent_notification_without_push_config(
-    client, mongo_client
-):
+def test_due_reminder_creates_persistent_notification_without_push_config(client, mongo_client):
     _login(client)
     database = mongo_client["Habit-Tracker_test"]
-    habit_id = database["habits"].insert_one(
-        {
-            "name": "Read",
-            "frequency": "daily",
-            "target": 1,
-            "created_at": datetime(2026, 10, 1),
-            "user_email": OWNER_EMAIL,
-            "reminder_enabled": True,
-            "reminder_time": "09:30",
-            "reminder_timezone": "UTC",
-        }
-    ).inserted_id
+    habit_id = (
+        database["habits"]
+        .insert_one(
+            {
+                "name": "Read",
+                "frequency": "daily",
+                "target": 1,
+                "created_at": datetime(2026, 10, 1),
+                "user_email": OWNER_EMAIL,
+                "reminder_enabled": True,
+                "reminder_time": "09:30",
+                "reminder_timezone": "UTC",
+            }
+        )
+        .inserted_id
+    )
 
     now = datetime(2026, 11, 3, 9, 30, tzinfo=timezone.utc)
     assert send_due_reminders(database, now) == 0

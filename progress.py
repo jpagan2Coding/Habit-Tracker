@@ -40,7 +40,8 @@ def _scheduled_dates(habit, start_date, end_date):
         days_since_anchor = (current - anchor).days
         is_scheduled = (
             frequency == "daily"
-            or frequency == "weekly" and days_since_anchor % 7 == 0
+            or frequency == "weekly"
+            and days_since_anchor % 7 == 0
             or frequency == "monthly"
             and current.day == min(anchor.day, monthrange(current.year, current.month)[1])
         )

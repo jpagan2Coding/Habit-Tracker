@@ -39,6 +39,7 @@ def send_due_reminders(database, now_utc=None):
     send removes that record so a later scheduler run can retry.
     """
     from pymongo.errors import DuplicateKeyError
+
     public_key = os.getenv("VAPID_PUBLIC_KEY")
     private_key = os.getenv("VAPID_PRIVATE_KEY")
     subject = os.getenv("VAPID_SUBJECT")
