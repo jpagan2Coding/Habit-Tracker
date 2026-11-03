@@ -277,6 +277,49 @@ def _duplicate_user_error(users, username, email):
         pass
     return "That email or username is already in use."
 
+# text size options (cookie value -> label shown on the settings page)
+TEXT_SIZES = {
+    "small": "Small",
+    "default": "Default",
+    "large": "Large",
+    "x-large": "Extra large",
+}
+TEXT_SIZE_COOKIE = "text_size"
+
+
+def current_text_size():
+    size = request.cookies.get(TEXT_SIZE_COOKIE, "default")
+    return size if size in TEXT_SIZES else "default"
+
+
+@app.context_processor
+def inject_text_size():
+    # makes text_size available on every page so <html> can use it
+    return {"text_size": current_text_size()}
+
+
+@app.route("/settings", methods=["GET", "POST"])
+def settings():
+    if request.method == "POST":
+        size = request.form.get("text_size", "default")
+        if request.form.get("reset") or size not in TEXT_SIZES:
+            size = "default"
+
+        response = redirect(url_for("settings"))
+        if size == "default":
+            response.delete_cookie(TEXT_SIZE_COOKIE)
+        else:
+            # remember the choice in this browser for a year
+            response.set_cookie(
+                TEXT_SIZE_COOKIE, size, max_age=60 * 60 * 24 * 365, samesite="Lax"
+            )
+        return response
+
+    return render_template(
+        "settings.html",
+        page_id="settings",
+        text_sizes=TEXT_SIZES,
+    )
 
 @app.route("/logout", methods=["POST"])
 def logout():

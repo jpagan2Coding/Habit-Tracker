@@ -19,6 +19,12 @@ html {
     scroll-behavior: smooth;
 }
 
+/* text size options from the Settings page */
+html.text-size-small { font-size: 87.5%; }
+html.text-size-default { font-size: 100%; }
+html.text-size-large { font-size: 112.5%; }
+html.text-size-x-large { font-size: 125%; }
+
 body {
     margin: 0;
     color: var(--color-text-primary);
