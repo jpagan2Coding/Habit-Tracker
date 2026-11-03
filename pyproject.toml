@@ -11,6 +11,8 @@ dependencies = [
     "pymongo>=4.0",
     "pytest>=8.2",
     "certifi>=2026.10.19",
+    "pywebpush>=2.0.0",
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]
@@ -50,4 +52,9 @@ exclude_lines = [
     "raise AssertionError",
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
+]
+
+[dependency-groups]
+dev = [
+    "py-vapid>=1.9.6",
 ]

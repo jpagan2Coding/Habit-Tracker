@@ -1,20 +1,33 @@
 import os
+import secrets
 from datetime import datetime
 from pathlib import Path
-
-import secrets
-
-from bson import ObjectId
-from flask import abort
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import certifi
+from bson import ObjectId
 from dotenv import load_dotenv
-from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
 from pymongo import ASCENDING, MongoClient
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from models import FREQUENCY_CHOICES
+from progress import (
+    VALID_PROGRESS_PERIODS,
+    calculate_overall_progress,
+    is_scheduled_on,
+)
+
+
+def _is_valid_timezone(name):
+    if name == "UTC":
+        return True
+    try:
+        ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        return False
+    return True
 
 load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 
@@ -101,11 +114,29 @@ def login():
 
 @app.route("/habit-tracker", methods=["GET", "POST"])
 def habit_tracker():
-    form = {"name": "", "description": "", "target": "", "frequency": ""}
+    form = {
+        "name": "",
+        "description": "",
+        "target": "",
+        "frequency": "",
+        "reminder_enabled": False,
+        "reminder_time": "",
+        "reminder_timezone": "UTC",
+    }
     errors = []
 
     if request.method == "POST":
-        form = {key: request.form.get(key, "").strip() for key in form}
+        form.update(
+            {
+                "name": request.form.get("name", "").strip(),
+                "description": request.form.get("description", "").strip(),
+                "target": request.form.get("target", "").strip(),
+                "frequency": request.form.get("frequency", "").strip(),
+                "reminder_enabled": request.form.get("reminder_enabled") == "on",
+                "reminder_time": request.form.get("reminder_time", "").strip(),
+                "reminder_timezone": request.form.get("reminder_timezone", "UTC").strip(),
+            }
+        )
 
         if not form["name"]:
             errors.append("Enter a name for your habit.")
@@ -120,6 +151,13 @@ def habit_tracker():
 
         if form["frequency"] not in FREQUENCY_CHOICES:
             errors.append("Choose a frequency.")
+        if form["reminder_enabled"]:
+            try:
+                datetime.strptime(form["reminder_time"], "%H:%M")
+            except ValueError:
+                errors.append("Enter a valid reminder time.")
+            if not _is_valid_timezone(form["reminder_timezone"]):
+                errors.append("Choose a valid time zone.")
 
         if not errors:
             get_db()["habits"].insert_one(
@@ -131,6 +169,9 @@ def habit_tracker():
                     "user_email": session.get("user_email"),
                     "created_at": datetime.utcnow(),
                     "completed_dates": [],
+                    "reminder_enabled": form["reminder_enabled"],
+                    "reminder_time": form["reminder_time"] or None,
+                    "reminder_timezone": form["reminder_timezone"] or "UTC",
                 }
             )
             return redirect(url_for("habit_dashboard"))
@@ -154,7 +195,18 @@ def habit_dashboard():
     for habit in habits:
         habit["id"] = str(habit["_id"])
 
-    today = datetime.utcnow().date().isoformat()
+    today_date = datetime.utcnow().date()
+    today = today_date.isoformat()
+    try:
+        progress_period = int(request.args.get("period", 7))
+    except ValueError:
+        progress_period = 7
+    if progress_period not in VALID_PROGRESS_PERIODS:
+        progress_period = 7
+
+    overall_progress = calculate_overall_progress(
+        habits, end_date=today_date, period_days=progress_period
+    )
 
     completion_by_id = {
         habit["id"]: today in habit.get("completed_dates", [])
@@ -164,11 +216,23 @@ def habit_dashboard():
     completed_today = sum(completion_by_id.values())
 
     total_habits = len(habits)
-    scheduled_today = total_habits
+    scheduled_today = sum(is_scheduled_on(habit, today_date) for habit in habits)
 
     completion_percentage = (
         round((completed_today / scheduled_today) * 100) if scheduled_today else 0
     )
+    notifications = []
+    unread_notification_count = 0
+    if session.get("user_email"):
+        notifications_collection = get_db()["notifications"]
+        notifications = list(
+            notifications_collection.find({"user_email": session["user_email"]})
+            .sort("created_at", -1)
+            .limit(10)
+        )
+        unread_notification_count = notifications_collection.count_documents(
+            {"user_email": session["user_email"], "read_at": {"$exists": False}}
+        )
 
     return render_template(
         "apps/habit_tracker/dashboard.html",
@@ -179,9 +243,13 @@ def habit_dashboard():
         completed_today=completed_today,
         scheduled_today=scheduled_today,
         completion_percentage=completion_percentage,
+        overall_progress=overall_progress,
+        progress_periods=VALID_PROGRESS_PERIODS,
         current_streak=None,
         today=today,
         habit_csrf_token=_habit_form_token(),
+        notifications=notifications,
+        unread_notification_count=unread_notification_count,
     )
 
 
@@ -280,6 +348,32 @@ def logout():
     session.clear()
     return redirect(url_for("home"))  # change to login once implemented
 
+
+@app.route("/api/push-subscriptions", methods=["POST"])
+def save_push_subscription():
+    if not session.get("user_id") or not session.get("user_email"):
+        return {"error": "Login required."}, 401
+    payload = request.get_json(silent=True) or {}
+    subscription = payload.get("subscription")
+    if not isinstance(subscription, dict) or not subscription.get("endpoint"):
+        return {"error": "Invalid push subscription."}, 400
+    get_db()["push_subscriptions"].update_one(
+        {"user_email": session["user_email"]},
+        {"$set": {"subscription": subscription, "updated_at": datetime.utcnow()}},
+        upsert=True,
+    )
+    return {"ok": True}
+
+
+@app.route("/api/push-public-key")
+def push_public_key():
+    if not session.get("user_id") or not session.get("user_email"):
+        return {"error": "Login required."}, 401
+    public_key = os.getenv("VAPID_PUBLIC_KEY")
+    if not public_key:
+        return {"error": "Push notifications are not configured."}, 503
+    return {"public_key": public_key}
+
 def _habit_form_token():
     token = session.get("habit_form_token")
     if not token:
@@ -290,7 +384,7 @@ def _habit_form_token():
 
 def _validate_habit_form_token():
     expected = session.get("habit_form_token")
-    submitted = request.form.get("csrf_token", "")
+    submitted = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token", "")
     if not expected or not secrets.compare_digest(expected, submitted):
         abort(400, description="Invalid form token. Reload the form and try again.")
 
@@ -309,6 +403,43 @@ def _owned_habit(habit_id):
     return query, habit
 
 
+def _owned_notification(notification_id):
+    if not ObjectId.is_valid(notification_id):
+        abort(404)
+    query = {
+        "_id": ObjectId(notification_id),
+        "user_email": session["user_email"],
+    }
+    notification = get_db()["notifications"].find_one(query)
+    if notification is None:
+        abort(404)
+    return query, notification
+
+
+@app.route("/api/notifications/<notification_id>/read", methods=["POST"])
+def mark_notification_read(notification_id):
+    if not session.get("user_id") or not session.get("user_email"):
+        return {"error": "Login required."}, 401
+    _validate_habit_form_token()
+    query, notification = _owned_notification(notification_id)
+    get_db()["notifications"].update_one(
+        query, {"$set": {"read_at": datetime.utcnow()}}
+    )
+    return {"ok": True, "url": notification.get("url", url_for("habit_dashboard"))}
+
+
+@app.route("/api/notifications/read-all", methods=["POST"])
+def mark_all_notifications_read():
+    if not session.get("user_id") or not session.get("user_email"):
+        return {"error": "Login required."}, 401
+    _validate_habit_form_token()
+    get_db()["notifications"].update_many(
+        {"user_email": session["user_email"], "read_at": {"$exists": False}},
+        {"$set": {"read_at": datetime.utcnow()}},
+    )
+    return {"ok": True}
+
+
 @app.route("/habits/<habit_id>/edit", methods=["GET", "POST"])
 def edit_habit(habit_id):
     if not session.get("user_id") or not session.get("user_email"):
@@ -321,6 +452,9 @@ def edit_habit(habit_id):
         "description": habit.get("description") or "",
         "target": str(habit.get("target", "")),
         "frequency": habit.get("frequency", ""),
+        "reminder_enabled": habit.get("reminder_enabled", False),
+        "reminder_time": habit.get("reminder_time") or "",
+        "reminder_timezone": habit.get("reminder_timezone") or "UTC",
     }
 
     if request.method == "POST":
@@ -329,6 +463,7 @@ def edit_habit(habit_id):
             key: request.form.get(key, "").strip()
             for key in form
         }
+        form["reminder_enabled"] = request.form.get("reminder_enabled") == "on"
 
         if not form["name"]:
             errors.append("Enter a name for your habit.")
@@ -345,6 +480,13 @@ def edit_habit(habit_id):
 
         if form["frequency"] not in FREQUENCY_CHOICES:
             errors.append("Choose a frequency.")
+        if form["reminder_enabled"]:
+            try:
+                datetime.strptime(form["reminder_time"], "%H:%M")
+            except ValueError:
+                errors.append("Enter a valid reminder time.")
+            if not _is_valid_timezone(form["reminder_timezone"]):
+                errors.append("Choose a valid time zone.")
 
         if not errors:
             result = get_db()["habits"].update_one(
@@ -355,6 +497,9 @@ def edit_habit(habit_id):
                         "description": form["description"] or None,
                         "target": target,
                         "frequency": form["frequency"],
+                        "reminder_enabled": form["reminder_enabled"],
+                        "reminder_time": form["reminder_time"] or None,
+                        "reminder_timezone": form["reminder_timezone"] or "UTC",
                     }
                 },
             )

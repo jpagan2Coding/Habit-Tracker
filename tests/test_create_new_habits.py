@@ -19,6 +19,24 @@ def test_create_new_habit_saves_all_fields(client, habits):
     assert habit['frequency'] == 'weekly'
 
 
+def test_create_new_habit_saves_reminder_settings(client, habits):
+    response = client.post(
+        '/habit-tracker',
+        data={
+            **VALID_HABIT,
+            'reminder_enabled': 'on',
+            'reminder_time': '09:30',
+            'reminder_timezone': 'America/New_York',
+        },
+    )
+
+    assert response.status_code == 302
+    stored = habits.find_one({'name': 'Drink Water'})
+    assert stored['reminder_enabled'] is True
+    assert stored['reminder_time'] == '09:30'
+    assert stored['reminder_timezone'] == 'America/New_York'
+
+
 def test_saved_habit_appears_on_dashboard(client):
     response = client.post('/habit-tracker', data=VALID_HABIT, follow_redirects=True)
 

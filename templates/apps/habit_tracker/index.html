@@ -109,6 +109,41 @@
                           placeholder="Why does this habit matter to you?">{{ form.description }}</textarea>
             </div>
 
+            <div class="rounded-lg border border-slate-200 p-4">
+                <div class="flex items-center gap-3">
+                    <input type="checkbox"
+                           id="reminder-enabled"
+                           name="reminder_enabled"
+                           {% if form.reminder_enabled %}checked{% endif %}
+                           class="h-4 w-4 rounded border-slate-300 text-blue-950">
+                    <label for="reminder-enabled" class="text-sm font-semibold text-slate-700">
+                        Enable reminder
+                    </label>
+                </div>
+                <div class="mt-4 grid gap-5 sm:grid-cols-2">
+                    <div>
+                        <label for="reminder-time" class="mb-2 block text-sm font-semibold text-slate-700">
+                            Reminder Time
+                        </label>
+                        <input type="time" id="reminder-time" name="reminder_time"
+                               value="{{ form.reminder_time }}"
+                               class="w-full rounded-lg border border-slate-300 px-4 py-2.5">
+                    </div>
+                    <div>
+                        <label for="reminder-timezone" class="mb-2 block text-sm font-semibold text-slate-700">
+                            Time Zone
+                        </label>
+                        <input type="text" id="reminder-timezone" name="reminder_timezone"
+                               value="{{ form.reminder_timezone or 'UTC' }}"
+                               readonly
+                               class="w-full rounded-lg border border-slate-300 bg-slate-50 px-4 py-2.5">
+                    </div>
+                </div>
+                <p id="notification-status" class="mt-2 text-sm text-slate-500" role="status">
+                    Reminders require browser notification permission.
+                </p>
+            </div>
+
             <div class="flex justify-end gap-3 pt-2">
                 <a href="{{ url_for('habit_dashboard') }}"
                    class="rounded-lg border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50">
@@ -123,4 +158,8 @@
         </form>
     </section>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/reminders.js') }}"></script>
 {% endblock %}

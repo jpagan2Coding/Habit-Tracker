@@ -30,6 +30,29 @@ uv run python app.py
 
 Then open [http://localhost:5000](http://localhost:5000).
 
+## Push Reminder Setup
+
+Reminders use Web Push and require HTTPS (except localhost), a browser that
+supports Push API notifications, and a minute-based worker or cron job. Keep
+these values in the server environment; never expose the private key:
+
+```text
+VAPID_PUBLIC_KEY=<public key>
+VAPID_PRIVATE_KEY=<private key>
+VAPID_SUBJECT=mailto:admin@example.com
+```
+
+Run the reminder worker once per minute:
+
+```bash
+uv run python reminders.py
+```
+
+The worker sends reminders only on each habit's scheduled days, uses the
+saved browser time zone, and stores delivery keys in MongoDB to prevent
+duplicates. Every due reminder is also stored in the dashboard Notification
+Center, even when browser push permission is denied or unsupported.
+
 ## Running Tests
 
 ```bash
