@@ -57,4 +57,5 @@ exclude_lines = [
 [dependency-groups]
 dev = [
     "py-vapid>=1.9.6",
+    "mongomock>=4.3.0",
 ]

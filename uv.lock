@@ -3016,6 +3016,7 @@ dev = [
 [package.dev-dependencies]
 dev = [
     { name = "py-vapid" },
+    { name = "mongomock" },
 ]
 
 [package.metadata]
@@ -3038,6 +3039,7 @@ provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "py-vapid", specifier = ">=1.9.6" }]
+dev = [{ name = "mongomock", specifier = ">=4.3.0" }]
 
 [[package]]
 name = "stevedore"
