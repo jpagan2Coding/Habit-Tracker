@@ -14,14 +14,10 @@ import pytest
 from bson import ObjectId
 from werkzeug.http import parse_options_header
 
-<<<<<<< HEAD
 FIELDS = [
     'habit_id', 'name', 'description', 'target', 'frequency',
     'created_at', 'completed_date', 'status',
 ]
-=======
-from models import HABIT_FILE_FIELDS
->>>>>>> a38f644 (Importing habits)
 
 
 @pytest.fixture
