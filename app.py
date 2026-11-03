@@ -2,7 +2,7 @@ import csv
 import io
 import os
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
 
@@ -26,7 +26,7 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from models import FREQUENCY_CHOICES
+from models import FREQUENCY_CHOICES, HABIT_FILE_FIELDS
 
 load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 
@@ -333,6 +333,49 @@ def _duplicate_user_error(users, username, email):
         pass
     return "That email or username is already in use."
 
+# text size options (cookie value -> label shown on the settings page)
+TEXT_SIZES = {
+    "small": "Small",
+    "default": "Default",
+    "large": "Large",
+    "x-large": "Extra large",
+}
+TEXT_SIZE_COOKIE = "text_size"
+
+
+def current_text_size():
+    size = request.cookies.get(TEXT_SIZE_COOKIE, "default")
+    return size if size in TEXT_SIZES else "default"
+
+
+@app.context_processor
+def inject_text_size():
+    # makes text_size available on every page so <html> can use it
+    return {"text_size": current_text_size()}
+
+
+@app.route("/settings", methods=["GET", "POST"])
+def settings():
+    if request.method == "POST":
+        size = request.form.get("text_size", "default")
+        if request.form.get("reset") or size not in TEXT_SIZES:
+            size = "default"
+
+        response = redirect(url_for("settings"))
+        if size == "default":
+            response.delete_cookie(TEXT_SIZE_COOKIE)
+        else:
+            # remember the choice in this browser for a year
+            response.set_cookie(
+                TEXT_SIZE_COOKIE, size, max_age=60 * 60 * 24 * 365, samesite="Lax"
+            )
+        return response
+
+    return render_template(
+        "settings.html",
+        page_id="settings",
+        text_sizes=TEXT_SIZES,
+    )
 
 @app.route("/logout", methods=["POST"])
 def logout():
@@ -414,6 +457,89 @@ def complete_habit(habit_id):
             "message": "Habit marked as complete",
         }
     ), 200
+def _parse_habit_file(payload):
+    """Validate a single exported habit completely before any database write."""
+    reader = csv.DictReader(io.StringIO(payload.decode("utf-8-sig"), newline=""), strict=True)
+    if reader.fieldnames != HABIT_FILE_FIELDS:
+        raise ValueError("The file must contain the exported habit columns in order.")
+
+    details = None
+    completed_dates = []
+    skipped_dates = []
+    for row in reader:
+        if None in row or any(value is None for value in row.values()):
+            raise ValueError("Every row must contain all habit columns.")
+        current = {
+            field: row[field]
+            for field in HABIT_FILE_FIELDS
+            if field not in ("completed_date", "status")
+        }
+        if details is not None and current != details:
+            raise ValueError("All rows must describe the same habit.")
+        details = current
+        if row["completed_date"]:
+            completed = date.fromisoformat(row["completed_date"])
+            if completed.isoformat() != row["completed_date"]:
+                raise ValueError("Completion dates must use YYYY-MM-DD.")
+            status = row["status"] or "completed"
+            if status == "completed":
+                if row["completed_date"] not in completed_dates:
+                    completed_dates.append(row["completed_date"])
+            elif status == "skipped":
+                if row["completed_date"] not in skipped_dates:
+                    skipped_dates.append(row["completed_date"])
+            else:
+                raise ValueError("History status must be completed or skipped.")
+        elif row["status"]:
+            raise ValueError("A history status requires a completion date.")
+
+    if details is None:
+        raise ValueError("The file contains no habit.")
+    if not details["name"].strip():
+        raise ValueError("Enter a habit name.")
+    if not details["target"].isdigit() or int(details["target"]) < 1:
+        raise ValueError("Target must be a positive whole number.")
+    if details["frequency"] not in FREQUENCY_CHOICES:
+        raise ValueError("Choose a supported frequency.")
+    created_at = details["created_at"]
+    if created_at:
+        created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at = created_at.astimezone(timezone.utc)
+    else:
+        created_at = datetime.now(timezone.utc)
+    return {
+        "name": details["name"],
+        "description": details["description"],
+        "target": int(details["target"]),
+        "frequency": details["frequency"],
+        "created_at": created_at,
+        "completed_dates": completed_dates,
+        "skipped_dates": skipped_dates,
+    }
+
+
+@app.route("/habits/import", methods=["POST"])
+def import_habit():
+    """Import a .habit attachment as a new habit owned by the signed-in user."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+    upload = request.files.get("file")
+    if upload is None or not upload.filename or not upload.filename.lower().endswith(".habit"):
+        abort(400, description="Choose a .habit file to import.")
+    # Bound memory use while still allowing large completion histories.
+    payload = upload.stream.read(1024 * 1024 + 1)
+    if len(payload) > 1024 * 1024:
+        abort(400, description="Habit files must be no larger than 1 MB.")
+    try:
+        habit = _parse_habit_file(payload)
+    except (UnicodeError, ValueError, csv.Error) as error:
+        abort(400, description=f"Invalid habit file: {error}")
+    habit["user_email"] = session["user_email"]
+    get_db()["habits"].insert_one(habit)
+    flash("Habit imported successfully.", "success")
+    return redirect(url_for("habit_dashboard"))
 
 
 @app.route("/habits/<habit_id>/export")
@@ -431,33 +557,28 @@ def export_habit(habit_id):
         created_at = created_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
     output = io.StringIO(newline="")
-    writer = csv.writer(output)
-    writer.writerow(
-        [
-            "habit_id",
-            "name",
-            "description",
-            "target",
-            "frequency",
-            "created_at",
-            "completed_date",
-            "status",
-        ]
-    )
-    details = [
-        str(habit["_id"]),
-        habit.get("name", ""),
-        habit.get("description") or "",
-        habit.get("target", ""),
-        habit.get("frequency", ""),
-        created_at or "",
-    ]
+    writer = csv.DictWriter(output, fieldnames=HABIT_FILE_FIELDS)
+    writer.writeheader()
+    details = {
+        "habit_id": str(habit["_id"]),
+        "name": habit.get("name", ""),
+        "description": habit.get("description") or "",
+        "target": habit.get("target", ""),
+        "frequency": habit.get("frequency", ""),
+        "created_at": created_at or "",
+    }
     history = [(d, "completed") for d in habit.get("completed_dates") or []]
     history += [(d, "skipped") for d in habit.get("skipped_dates") or []]
     for history_date, status in history or [("", "")]:
         if isinstance(history_date, datetime):
             history_date = history_date.date().isoformat()
-        writer.writerow([*details, history_date, status])
+        writer.writerow(
+            {
+                **details,
+                "completed_date": history_date,
+                "status": status,
+            }
+        )
 
     filename = secure_filename(habit.get("name", ""))[:80] or "habit"
     response = send_file(
