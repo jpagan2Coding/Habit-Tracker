@@ -214,9 +214,9 @@
                         Habits you need to complete today
                     </p>
                 </div>
-                {% if habits %}
+                {% if todays_habits %}
                 <div class="space-y-3">
-                    {% for habit in habits %}
+                    {% for habit in todays_habits %}
                     {% set is_completed = completion_by_id[habit.id] %}
 
 
@@ -295,6 +295,11 @@
                         </div>
                     </article>
                     {% endfor %}
+                </div>
+                {% elif habits %}
+                <div class="rounded-xl border-2 border-dashed border-slate-300 bg-white px-6 py-10 text-center">
+                    <h3 class="text-xl font-bold text-slate-900">Nothing scheduled for today</h3>
+                    <p class="mt-2 text-slate-500">You've hit all your targets for now.</p>
                 </div>
                 {% else %}
                 <div class="rounded-xl border-2 border-dashed border-slate-300 bg-white px-6 py-10 text-center">
