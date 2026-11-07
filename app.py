@@ -619,6 +619,20 @@ def complete_habit(habit_id):
     ), 200
 
 
+def _parse_history_row(row):
+    if row["completed_date"]:
+        completed = date.fromisoformat(row["completed_date"])
+        if completed.isoformat() != row["completed_date"]:
+            raise ValueError("Completion dates must use YYYY-MM-DD.")
+        status = row["status"] or "completed"
+        if status not in ("completed", "skipped"):
+            raise ValueError("History status must be completed or skipped.")
+        return row["completed_date"], status
+    if row["status"]:
+        raise ValueError("A history status requires a completion date.")
+    return None
+
+
 def _parse_habit_file(payload):
     """Validate a single exported habit completely before any database write."""
     reader = csv.DictReader(io.StringIO(payload.decode("utf-8-sig"), newline=""), strict=True)
@@ -639,21 +653,12 @@ def _parse_habit_file(payload):
         if details is not None and current != details:
             raise ValueError("All rows must describe the same habit.")
         details = current
-        if row["completed_date"]:
-            completed = date.fromisoformat(row["completed_date"])
-            if completed.isoformat() != row["completed_date"]:
-                raise ValueError("Completion dates must use YYYY-MM-DD.")
-            status = row["status"] or "completed"
-            if status == "completed":
-                if row["completed_date"] not in completed_dates:
-                    completed_dates.append(row["completed_date"])
-            elif status == "skipped":
-                if row["completed_date"] not in skipped_dates:
-                    skipped_dates.append(row["completed_date"])
-            else:
-                raise ValueError("History status must be completed or skipped.")
-        elif row["status"]:
-            raise ValueError("A history status requires a completion date.")
+        history = _parse_history_row(row)
+        if history is not None:
+            history_date, status = history
+            dates = completed_dates if status == "completed" else skipped_dates
+            if history_date not in dates:
+                dates.append(history_date)
 
     if details is None:
         raise ValueError("The file contains no habit.")
@@ -680,6 +685,29 @@ def _parse_habit_file(payload):
         "completed_dates": completed_dates,
         "skipped_dates": skipped_dates,
     }
+
+
+def _format_export_datetime(value):
+    if not isinstance(value, datetime):
+        return value or ""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _serialize_habit_history(habit):
+    history = [
+        (history_date, "completed") for history_date in habit.get("completed_dates") or []
+    ]
+    history.extend(
+        (history_date, "skipped") for history_date in habit.get("skipped_dates") or []
+    )
+    serialized = []
+    for history_date, status in history:
+        if isinstance(history_date, datetime):
+            history_date = history_date.date().isoformat()
+        serialized.append((history_date, status))
+    return serialized or [("", "")]
 
 
 @app.route("/habits/import", methods=["POST"])
@@ -711,13 +739,7 @@ def export_habit(habit_id):
         return redirect(url_for("login"))
 
     _, habit = _owned_habit(habit_id)
-    created_at = habit.get("created_at")
-    if isinstance(created_at, datetime):
-        # MongoDB returns naive UTC datetimes unless tz_aware is enabled.
-        if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=timezone.utc)
-        created_at = created_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
+    created_at = _format_export_datetime(habit.get("created_at"))
     output = io.StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=HABIT_FILE_FIELDS)
     writer.writeheader()
@@ -729,11 +751,7 @@ def export_habit(habit_id):
         "frequency": habit.get("frequency", ""),
         "created_at": created_at or "",
     }
-    history = [(d, "completed") for d in habit.get("completed_dates") or []]
-    history += [(d, "skipped") for d in habit.get("skipped_dates") or []]
-    for history_date, status in history or [("", "")]:
-        if isinstance(history_date, datetime):
-            history_date = history_date.date().isoformat()
+    for history_date, status in _serialize_habit_history(habit):
         writer.writerow(
             {
                 **details,
