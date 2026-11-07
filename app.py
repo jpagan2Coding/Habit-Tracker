@@ -528,31 +528,26 @@ def _validate_habit_form_token():
         abort(400, description="Invalid form token. Reload the form and try again.")
 
 
-def _owned_habit(habit_id):
-    if not ObjectId.is_valid(habit_id):
+def _owned_document(collection_name, document_id):
+    if not ObjectId.is_valid(document_id):
         abort(404)
 
     query = {
-        "_id": ObjectId(habit_id),
+        "_id": ObjectId(document_id),
         "user_email": session["user_email"],
     }
-    habit = get_db()["habits"].find_one(query)
-    if habit is None:
+    document = get_db()[collection_name].find_one(query)
+    if document is None:
         abort(404)
-    return query, habit
+    return query, document
+
+
+def _owned_habit(habit_id):
+    return _owned_document("habits", habit_id)
 
 
 def _owned_notification(notification_id):
-    if not ObjectId.is_valid(notification_id):
-        abort(404)
-    query = {
-        "_id": ObjectId(notification_id),
-        "user_email": session["user_email"],
-    }
-    notification = get_db()["notifications"].find_one(query)
-    if notification is None:
-        abort(404)
-    return query, notification
+    return _owned_document("notifications", notification_id)
 
 
 @app.route("/api/notifications/<notification_id>/read", methods=["POST"])

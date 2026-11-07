@@ -1,5 +1,8 @@
 from datetime import datetime, timezone
 
+import pytest
+from bson import ObjectId
+
 from reminders import send_due_reminders
 
 OWNER_EMAIL = "person@example.com"
@@ -101,3 +104,20 @@ def test_notification_read_endpoints_are_user_scoped(client, mongo_client):
     )
     assert response.status_code == 404
     assert notifications.find_one({"_id": other}).get("read_at") is None
+
+
+@pytest.mark.parametrize("notification_id", ["not-an-object-id", str(ObjectId())])
+def test_notification_read_returns_not_found_for_invalid_or_missing_id(
+    client, notification_id
+):
+    _login(client)
+    client.get("/dashboard")
+    with client.session_transaction() as session:
+        token = session["habit_form_token"]
+
+    response = client.post(
+        f"/api/notifications/{notification_id}/read",
+        headers={"X-CSRF-Token": token},
+    )
+
+    assert response.status_code == 404
