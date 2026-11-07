@@ -44,6 +44,44 @@ def _is_valid_timezone(name):
     return True
 
 
+def _validate_habit_form(form, *, target_required=False, max_name_length=None):
+    errors = []
+
+    if not form["name"]:
+        errors.append("Enter a name for your habit.")
+    elif max_name_length is not None and len(form["name"]) > max_name_length:
+        errors.append(f"Habit name must be {max_name_length} characters or fewer.")
+
+    target = None
+    if target_required:
+        if not form["target"]:
+            errors.append("Enter a target.")
+        elif not form["target"].isdigit() or int(form["target"]) < 1:
+            errors.append("Target must be a whole number of 1 or more.")
+        else:
+            target = int(form["target"])
+    else:
+        try:
+            target = int(form["target"])
+        except ValueError:
+            target = 0
+
+        if target < 1:
+            errors.append("Target must be a whole number of 1 or more.")
+
+    if form["frequency"] not in FREQUENCY_CHOICES:
+        errors.append("Choose a frequency.")
+    if form["reminder_enabled"]:
+        try:
+            datetime.strptime(form["reminder_time"], "%H:%M")
+        except ValueError:
+            errors.append("Enter a valid reminder time.")
+        if not _is_valid_timezone(form["reminder_timezone"]):
+            errors.append("Choose a valid time zone.")
+
+    return errors, target
+
+
 load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 
 app = Flask(__name__)
@@ -163,26 +201,7 @@ def habit_tracker():
             }
         )
 
-        if not form["name"]:
-            errors.append("Enter a name for your habit.")
-
-        target = None
-        if not form["target"]:
-            errors.append("Enter a target.")
-        elif not form["target"].isdigit() or int(form["target"]) < 1:
-            errors.append("Target must be a whole number of 1 or more.")
-        else:
-            target = int(form["target"])
-
-        if form["frequency"] not in FREQUENCY_CHOICES:
-            errors.append("Choose a frequency.")
-        if form["reminder_enabled"]:
-            try:
-                datetime.strptime(form["reminder_time"], "%H:%M")
-            except ValueError:
-                errors.append("Enter a valid reminder time.")
-            if not _is_valid_timezone(form["reminder_timezone"]):
-                errors.append("Choose a valid time zone.")
+        errors, target = _validate_habit_form(form, target_required=True)
 
         if not errors:
             get_db()["habits"].insert_one(
@@ -479,6 +498,21 @@ def push_public_key():
     return {"public_key": public_key}
 
 
+@app.route("/api/push-status")
+def push_status():
+    if not session.get("user_id") or not session.get("user_email"):
+        return {"error": "Login required."}, 401
+    configured = all(
+        os.getenv(name)
+        for name in ("VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT")
+    )
+    subscription = get_db()["push_subscriptions"].find_one(
+        {"user_email": session["user_email"]},
+        {"_id": 1},
+    )
+    return {"configured": configured, "subscribed": subscription is not None}
+
+
 def _habit_form_token():
     token = session.get("habit_form_token")
     if not token:
@@ -747,28 +781,7 @@ def edit_habit(habit_id):
         form = {key: request.form.get(key, "").strip() for key in form}
         form["reminder_enabled"] = request.form.get("reminder_enabled") == "on"
 
-        if not form["name"]:
-            errors.append("Enter a name for your habit.")
-        elif len(form["name"]) > 100:
-            errors.append("Habit name must be 100 characters or fewer.")
-
-        try:
-            target = int(form["target"])
-        except ValueError:
-            target = 0
-
-        if target < 1:
-            errors.append("Target must be a whole number of 1 or more.")
-
-        if form["frequency"] not in FREQUENCY_CHOICES:
-            errors.append("Choose a frequency.")
-        if form["reminder_enabled"]:
-            try:
-                datetime.strptime(form["reminder_time"], "%H:%M")
-            except ValueError:
-                errors.append("Enter a valid reminder time.")
-            if not _is_valid_timezone(form["reminder_timezone"]):
-                errors.append("Choose a valid time zone.")
+        errors, target = _validate_habit_form(form, max_name_length=100)
 
         if not errors:
             result = get_db()["habits"].update_one(
