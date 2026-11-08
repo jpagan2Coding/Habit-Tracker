@@ -38,7 +38,7 @@ these values in the server environment; never expose the private key:
 
 ```text
 VAPID_PUBLIC_KEY=<public key>
-VAPID_PRIVATE_KEY=<private key>
+VAPID_PRIVATE_KEY=<private key or path to a PEM file>
 VAPID_SUBJECT=mailto:admin@example.com
 ```
 
@@ -47,6 +47,11 @@ Run the reminder worker once per minute:
 ```bash
 uv run python reminders.py
 ```
+
+The web app does not run this worker automatically. If it is not running,
+reminders will not be added to the bell or sent as push notifications. On
+Windows, configure Task Scheduler to run the command every minute from the
+repository directory while the app is deployed.
 
 The worker sends reminders only on each habit's scheduled days, uses the
 saved browser time zone, and stores delivery keys in MongoDB to prevent
