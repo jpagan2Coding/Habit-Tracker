@@ -14,6 +14,7 @@ import pytest
 from bson import ObjectId
 from werkzeug.http import parse_options_header
 
+from app import _format_export_datetime, _serialize_habit_history
 from models import HABIT_FILE_FIELDS
 
 
@@ -46,6 +47,41 @@ def read_export(response):
     rows = list(reader)
     assert all(set(row) == set(HABIT_FILE_FIELDS) for row in rows)
     return rows
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, ""),
+        ("", ""),
+        ("already-formatted", "already-formatted"),
+        (datetime(2026, 10, 1, 14, 30, 45), "2026-10-01T14:30:45Z"),
+    ],
+)
+def test_format_export_datetime_handles_basic_values(value, expected):
+    assert _format_export_datetime(value) == expected
+
+
+def test_format_export_datetime_normalizes_timezone_aware_value():
+    assert (
+        _format_export_datetime(
+            datetime(2026, 10, 1, 10, 30, 45, tzinfo=timezone(timedelta(hours=-4)))
+        )
+        == "2026-10-01T14:30:45Z"
+    )
+
+
+def test_serialize_habit_history_combines_statuses_and_preserves_empty_history():
+    habit = {
+        "completed_dates": [datetime(2026, 10, 2)],
+        "skipped_dates": ["2026-10-03"],
+    }
+
+    assert _serialize_habit_history(habit) == [
+        ("2026-10-02", "completed"),
+        ("2026-10-03", "skipped"),
+    ]
+    assert _serialize_habit_history({}) == [("", "")]
 
 
 def test_export_downloads_csv_with_habit_extension(client, export_habit):

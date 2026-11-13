@@ -1,3 +1,6 @@
+import pytest
+
+
 VALID_HABIT = {
     "name": "Drink Water",
     "description": "8 glasses a day",
@@ -66,3 +69,30 @@ def test_missing_frequency_does_not_create_habit(authenticated_client, habits):
 
     assert response.status_code == 400
     assert habits.count_documents({}) == 0
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("target", "", "Enter a target."),
+        ("target", "1.5", "Target must be a whole number of 1 or more."),
+        ("reminder_time", "25:00", "Enter a valid reminder time."),
+        ("reminder_timezone", "Invalid/Timezone", "Choose a valid time zone."),
+    ],
+)
+def test_invalid_create_form_preserves_validation_messages(
+    authenticated_client, field, value, message
+):
+    response = authenticated_client.post(
+        "/habit-tracker",
+        data={
+            **VALID_HABIT,
+            "reminder_enabled": "on",
+            "reminder_time": "09:30",
+            "reminder_timezone": "UTC",
+            field: value,
+        },
+    )
+
+    assert response.status_code == 400
+    assert message.encode() in response.data

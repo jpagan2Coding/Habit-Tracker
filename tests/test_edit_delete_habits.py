@@ -112,6 +112,28 @@ def test_invalid_edit_does_not_change_habit(client, habits, owned_habit, field, 
     assert habits.count_documents({}) == 1
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("target", "", "Target must be a whole number of 1 or more."),
+        ("name", "x" * 101, "Habit name must be 100 characters or fewer."),
+        ("reminder_time", "25:00", "Enter a valid reminder time."),
+        ("reminder_timezone", "Invalid/Timezone", "Choose a valid time zone."),
+    ],
+)
+def test_invalid_edit_form_preserves_validation_messages(
+    client, owned_habit, field, value, message
+):
+    token = form_token(client, owned_habit)
+    response = client.post(
+        f"/habits/{owned_habit}/edit",
+        data={**UPDATED_FORM, field: value, "csrf_token": token},
+    )
+
+    assert response.status_code == 400
+    assert message.encode() in response.data
+
+
 def test_leaving_edit_form_does_not_save(client, habits, owned_habit):
     original = habits.find_one({"_id": owned_habit})
 

@@ -6,7 +6,7 @@
     if (!checkbox || !timezone || !status) return;
     timezone.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 
-    checkbox.addEventListener('change', async function () {
+    async function enableReminders() {
         if (!checkbox.checked) {
             status.textContent = 'Reminders are disabled.';
             return;
@@ -19,20 +19,23 @@
             status.textContent = 'Notifications are blocked. Allow them in your browser settings.';
             return;
         }
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') {
-            status.textContent = 'Notification permission was not granted.';
-            return;
-        }
         try {
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                status.textContent = 'Notification permission was not granted.';
+                return;
+            }
             const registration = await navigator.serviceWorker.register('/static/push-service-worker.js');
             const keyResponse = await fetch('/api/push-public-key');
             if (!keyResponse.ok) throw new Error('Push notifications are not configured.');
             const keyData = await keyResponse.json();
-            const subscription = await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(keyData.public_key)
-            });
+            let subscription = await registration.pushManager.getSubscription();
+            if (!subscription) {
+                subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(keyData.public_key)
+                });
+            }
             const response = await fetch('/api/push-subscriptions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -44,7 +47,10 @@
             checkbox.checked = false;
             status.textContent = error.message || 'Reminder setup failed.';
         }
-    });
+    }
+
+    checkbox.addEventListener('change', enableReminders);
+    if (checkbox.checked) enableReminders();
 
     function urlBase64ToUint8Array(value) {
         const padding = '='.repeat((4 - value.length % 4) % 4);

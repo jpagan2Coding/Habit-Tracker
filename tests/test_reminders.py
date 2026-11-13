@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from reminders import reminder_due
+from reminders import _vapid_private_key, reminder_due
 
 
 def test_daily_reminder_is_due_at_local_time():
@@ -33,3 +33,15 @@ def test_monthly_reminder_uses_habit_schedule():
         "reminder_timezone": "UTC",
     }
     assert reminder_due(habit, datetime(2026, 2, 28, 8, tzinfo=timezone.utc)) == "2026-02-28:08:00"
+
+
+def test_vapid_private_key_accepts_repository_relative_path(tmp_path, monkeypatch):
+    key_file = tmp_path / "private.pem"
+    key_file.write_text("test-key", encoding="utf-8")
+    monkeypatch.setattr("reminders.__file__", str(tmp_path / "reminders.py"))
+
+    assert _vapid_private_key("private.pem") == "test-key"
+
+
+def test_vapid_private_key_preserves_inline_key():
+    assert _vapid_private_key("inline-key") == "inline-key"

@@ -13,6 +13,7 @@ from datetime import datetime
 import pytest
 from bson import ObjectId
 
+from app import _parse_history_row
 from models import HABIT_FILE_FIELDS
 
 
@@ -58,6 +59,43 @@ def upload_habit(client, payload, filename="Read_daily.habit"):
 def assert_import_redirect(response):
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/dashboard")
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        ("", ("2026-10-02", "completed")),
+        ("completed", ("2026-10-02", "completed")),
+        ("skipped", ("2026-10-02", "skipped")),
+    ],
+)
+def test_parse_history_row_returns_normalized_history(status, expected):
+    row = {"completed_date": "2026-10-02", "status": status}
+
+    assert _parse_history_row(row) == expected
+
+
+def test_parse_history_row_rejects_status_without_date():
+    with pytest.raises(ValueError, match="A history status requires a completion date."):
+        _parse_history_row({"completed_date": "", "status": "completed"})
+
+
+@pytest.mark.parametrize(
+    ("row", "message"),
+    [
+        (
+            {"completed_date": "2026-10-02", "status": "unknown"},
+            "History status must be completed or skipped.",
+        ),
+        (
+            {"completed_date": "2026-W40-3", "status": "completed"},
+            "Completion dates must use YYYY-MM-DD.",
+        ),
+    ],
+)
+def test_parse_history_row_rejects_invalid_history_values(row, message):
+    with pytest.raises(ValueError, match=message):
+        _parse_history_row(row)
 
 
 def test_import_restores_details_and_entire_completion_history(import_client, habits, import_rows):

@@ -7,9 +7,22 @@ are read from VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, and VAPID_SUBJECT.
 import json
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from progress import is_scheduled_on
+
+
+def _vapid_private_key(value):
+    """Return key contents, allowing a path in environment-based deployments."""
+    if not value:
+        return value
+    key_path = Path(value)
+    if not key_path.is_absolute():
+        key_path = Path(__file__).resolve().parent / key_path
+    if key_path.is_file():
+        return key_path.read_text(encoding="utf-8")
+    return value
 
 
 def _timezone(name):
@@ -41,7 +54,7 @@ def send_due_reminders(database, now_utc=None):
     from pymongo.errors import DuplicateKeyError
 
     public_key = os.getenv("VAPID_PUBLIC_KEY")
-    private_key = os.getenv("VAPID_PRIVATE_KEY")
+    private_key = _vapid_private_key(os.getenv("VAPID_PRIVATE_KEY"))
     subject = os.getenv("VAPID_SUBJECT")
     push_enabled = bool(public_key and private_key and subject)
     if push_enabled:
