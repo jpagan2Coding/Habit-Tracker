@@ -85,6 +85,14 @@ def test_login_get_returns_ok(client):
     assert b"Email address" in response.data
 
 
+def test_logged_in_user_is_redirected_from_login(authenticated_client):
+    """An authenticated user should be sent straight to the dashboard."""
+    response = authenticated_client.get("/login")
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/dashboard")
+
+
 def test_login_requires_both_fields(client):
     """Test that an incomplete login shows a helpful validation message."""
     response = client.post("/login", data={"email": "", "password": ""})
