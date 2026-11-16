@@ -541,11 +541,43 @@
                     </p>
                 </div>
 
+                <form id="bulk-delete-form"
+      method="POST"
+      action="{{ url_for('delete_selected_habits') }}"
+      class="mb-4 flex flex-wrap items-center gap-4">
+
+    <input type="hidden"
+           name="csrf_token"
+           value="{{ habit_csrf_token }}">
+
+    <button id="delete-selected-button"
+            type="submit"
+            disabled
+            class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50">
+        Delete Selected (0)
+    </button>
+
+    <p id="habit-selection-status"
+       role="status"
+       aria-live="polite"
+       class="text-sm text-slate-600">
+        0 habits selected.
+    </p>
+</form>
 
                 <div class="habit-table-card overflow-x-auto rounded-xl border border-slate-200 bg-white">
                     <table class="min-w-full divide-y divide-slate-200">
                         <thead class="bg-slate-50">
                             <tr>
+                                 <th scope="col" class="w-12 px-5 py-4 text-left">
+    <label class="inline-flex items-center">
+        <input id="select-all-habits"
+               type="checkbox"
+               {% if not habits %}disabled{% endif %}
+               class="h-4 w-4 rounded border-slate-300 text-indigo-600">
+        <span class="sr-only">Select all habits in this list</span>
+    </label>
+</th>
                                 <th
                                     class="px-5 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
                                     Habit
@@ -582,6 +614,16 @@
                             {% if habits %}
                             {% for habit in habits %}
                             <tr>
+                                <td class="px-5 py-4">
+    <label class="inline-flex items-center">
+        <input type="checkbox"
+               name="habit_ids"
+               value="{{ habit.id }}"
+               form="bulk-delete-form"
+               class="habit-selection-checkbox h-4 w-4 rounded border-slate-300 text-indigo-600">
+        <span class="sr-only">Select {{ habit.name }}</span>
+    </label>
+</td>
                                 <td class="px-5 py-4">
                                     <p class="font-semibold text-slate-900">
                                         {{ habit.name }}
@@ -656,8 +698,7 @@
                             {% endfor %}
                             {% else %}
                             <tr>
-                                <td colspan="5" class="px-5 py-10 text-center text-sm text-slate-400">
-                                    No habits are available yet.
+<td colspan="6" class="px-5 py-10 text-center text-sm text-slate-400">                                    No habits are available yet.
                                 </td>
                             </tr>
                             {% endif %}
@@ -708,4 +749,5 @@ document.querySelectorAll(".complete-habit-form").forEach(form => {
     };
 </script>
 <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
+<script src="{{ url_for('static', filename='js/habit-bulk-delete.js') }}"></script>
 {% endblock %}

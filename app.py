@@ -987,6 +987,43 @@ def delete_account_data():
         habit_csrf_token=_habit_form_token(),
     )
 
+@app.route("/habits/delete-selected", methods=["POST"])
+@login_required
+def delete_selected_habits():
+    """Delete only selected habits belonging to the signed-in user."""
+    _validate_habit_form_token()
+
+    submitted_ids = request.form.getlist("habit_ids")
+
+    if not submitted_ids:
+        flash("Select at least one habit to delete.", "error")
+        return redirect(url_for("habit_dashboard"))
+
+    if any(not ObjectId.is_valid(habit_id) for habit_id in submitted_ids):
+        abort(400, description="Invalid habit selection. Reload the Dashboard and try again.")
+
+    # Normalize and deduplicate IDs before constructing the deletion filter.
+    habit_ids = list({ObjectId(habit_id) for habit_id in submitted_ids})
+
+    result = get_db()["habits"].delete_many(
+        {
+            "_id": {"$in": habit_ids},
+            "user_email": session["user_email"],
+        }
+    )
+
+    deleted_count = result.deleted_count
+
+    if deleted_count:
+        label = "habit" if deleted_count == 1 else "habits"
+        flash(f"{deleted_count} {label} deleted successfully.", "success")
+    else:
+        flash(
+            "No habits were deleted. They may have already been removed.",
+            "error",
+        )
+
+    return redirect(url_for("habit_dashboard"))
 
 if __name__ == "__main__":
     app.run(debug=True)
