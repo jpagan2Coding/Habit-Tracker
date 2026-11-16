@@ -625,6 +625,42 @@ def complete_habit(habit_id):
         }
     ), 200
 
+@app.route("/habits/<habit_id>/uncomplete", methods=["POST"])
+def uncomplete_habit(habit_id):
+    """Undo today's completion for the authenticated user's habit."""
+
+    if not session.get("user_id") or not session.get("user_email"):
+        return jsonify({"error": "Login required"}), 401
+
+    _validate_habit_form_token()
+
+    query, habit = _owned_habit(habit_id)
+    today_str = datetime.now(timezone.utc).date().isoformat()
+
+    if today_str not in habit.get("completed_dates", []):
+        return jsonify({"error": "Habit is not completed today"}), 409
+
+    result = get_db()["habits"].update_one(
+        {
+            **query,
+            "completed_dates": today_str,
+        },
+        {
+            "$pull": {"completed_dates": today_str},
+        },
+    )
+
+    if result.modified_count == 0:
+        return jsonify({"error": "Completion not removed"}), 409
+
+    return jsonify(
+        {
+            "habit_id": habit_id,
+            "completed": False,
+            "completed_date": today_str,
+            "message": "Habit completion undone",
+        }
+    ), 200
 
 def _parse_history_row(row):
     if row["completed_date"]:
