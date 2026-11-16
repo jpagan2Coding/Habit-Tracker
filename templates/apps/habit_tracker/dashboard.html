@@ -52,7 +52,8 @@
 
 
         <div class="border-t border-slate-200 p-4">
-            <a href="{{ url_for('settings') }}"
+            <a id="shortcut-settings"
+            href="{{ url_for('settings') }}"
                 class="sidebar-link mb-2 flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">
                 <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -196,7 +197,8 @@
                 </div>
 
 
-                <a href="{{ url_for('habit_tracker') }}"
+               <a id="shortcut-new-habit"
+                href="{{ url_for('habit_tracker') }}"
                     class="inline-flex w-fit items-center gap-2 rounded-lg bg-blue-950 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-900">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
@@ -205,6 +207,40 @@
                 </a>
             </section>
 
+<section class="mb-6 rounded-xl border border-slate-200 bg-white p-5"
+         aria-labelledby="keyboard-shortcuts-heading">
+
+    <h2 id="keyboard-shortcuts-heading"
+        class="text-lg font-semibold text-slate-900">
+        Keyboard Shortcuts
+    </h2>
+
+    <p class="mt-1 text-sm text-slate-600">
+        On the Dashboard, press g, release it, then press the second key
+        within one second. Shortcuts do not run while you are typing.
+    </p>
+
+    <ul class="mt-3 space-y-1 text-sm text-slate-700">
+        <li><kbd>g</kbd> then <kbd>n</kbd> — Add New Habit</li>
+        <li><kbd>g</kbd> then <kbd>s</kbd> — Open Settings</li>
+        <li><kbd>g</kbd> then <kbd>b</kbd> — Toggle Notifications</li>
+    </ul>
+
+    <label class="mt-4 inline-flex items-center gap-2 text-sm text-slate-700">
+        <input id="keyboard-shortcuts-enabled"
+               type="checkbox"
+               checked
+               class="h-4 w-4 rounded border-slate-300">
+        Enable keyboard shortcuts
+    </label>
+
+    <p id="keyboard-shortcut-status"
+       role="status"
+       aria-live="polite"
+       class="mt-3 text-sm font-medium text-indigo-700">
+        Keyboard shortcuts enabled.
+    </p>
+</section>
 
             <!-- Summary cards -->
             <section class="mb-6 grid gap-5 md:grid-cols-3">
