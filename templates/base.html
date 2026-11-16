@@ -78,6 +78,14 @@
                 {% endif %}
             {% endwith %}
             {% endblock %}
+
+<p id="keyboard-navigation-feedback"
+   role="status"
+   aria-live="polite"
+   hidden
+   class="mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-800">
+</p>
+
             <div class="animate-fade-in">
                 {% block content %}{% endblock %}
             </div>
@@ -98,6 +106,7 @@
     </footer>
 
     <script src="{{ url_for('static', filename='js/global.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/keyboard-shortcuts.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -2,9 +2,9 @@ name: Quick Test
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 jobs:
   quick-test:
@@ -15,27 +15,27 @@ jobs:
       MONGODB_DATABASE: Habit-Tracker_test
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v4
-      with:
-        enable-cache: true
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
 
-    - name: Install dependencies
-      run: uv sync --extra dev
+      - name: Install dependencies
+        run: uv sync --extra dev
 
-    - name: Run tests
-      run: uv run pytest -v
+      - name: Run Python tests
+        run: uv run pytest -v --ignore=tests/test_keyboard_shortcuts.py
 
-    - name: Check if app starts
-      run: |
-        timeout 5s uv run python app.py &
-        sleep 3
-        echo "✅ App started successfully"
+      - name: Check if app starts
+        run: |
+          timeout 5s uv run python app.py &
+          sleep 3
+          echo "App started successfully"

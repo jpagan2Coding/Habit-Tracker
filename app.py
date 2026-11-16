@@ -84,6 +84,27 @@ def _validate_habit_form(form, *, target_required=False, max_name_length=None):
     return errors, target
 
 
+def _parse_start_date(value, today, current=None):
+    """Check the start date from the habit form (US-23).
+
+    Returns (start_date, error). A blank field keeps the current start date,
+    and keeping a habit's existing start date is always allowed, even after
+    that date has passed. A new start date has to be today or later.
+    """
+    if not value or value == current:
+        return current, None
+
+    try:
+        start = date.fromisoformat(value)
+    except ValueError:
+        return current, "Enter a valid start date."
+
+    if start < today:
+        return current, "Start date cannot be in the past."
+
+    return start.isoformat(), None
+
+
 load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 
 app = Flask(__name__)
@@ -187,6 +208,7 @@ def login():
 @app.route("/habit-tracker", methods=["GET", "POST"])
 @login_required
 def habit_tracker():
+    today = datetime.utcnow().date()
     form = {
         "name": "",
         "description": "",
@@ -195,6 +217,7 @@ def habit_tracker():
         "reminder_enabled": False,
         "reminder_time": "",
         "reminder_timezone": "UTC",
+        "start_date": today.isoformat(),
     }
     errors = []
 
@@ -208,10 +231,14 @@ def habit_tracker():
                 "reminder_enabled": request.form.get("reminder_enabled") == "on",
                 "reminder_time": request.form.get("reminder_time", "").strip(),
                 "reminder_timezone": request.form.get("reminder_timezone", "UTC").strip(),
+                "start_date": request.form.get("start_date", "").strip(),
             }
         )
 
         errors, target = _validate_habit_form(form, target_required=True)
+        start_date, start_date_error = _parse_start_date(form["start_date"], today)
+        if start_date_error:
+            errors.append(start_date_error)
 
         if not errors:
             get_db()["habits"].insert_one(
@@ -226,6 +253,8 @@ def habit_tracker():
                     "reminder_enabled": form["reminder_enabled"],
                     "reminder_time": form["reminder_time"] or None,
                     "reminder_timezone": form["reminder_timezone"] or "UTC",
+                    # a blank start date means the habit starts today
+                    "start_date": start_date or today.isoformat(),
                 }
             )
             return redirect(url_for("habit_dashboard"))
@@ -236,6 +265,7 @@ def habit_tracker():
         form=form,
         errors=errors,
         frequency_choices=FREQUENCY_CHOICES,
+        today=today.isoformat(),
     ), (400 if errors else 200)
 
 
@@ -249,6 +279,12 @@ def is_due_today(habit, today):
         return False
 
     today_iso = today.isoformat()
+
+    # habits that haven't reached their start date yet aren't due (US-23)
+    start_date = habit.get("start_date")
+    if start_date and start_date > today_iso:
+        return False
+    
     completed = {d for d in habit.get("completed_dates", []) if isinstance(d, str)}
     skipped = {d for d in habit.get("skipped_dates", []) if isinstance(d, str)}
 
@@ -274,6 +310,20 @@ def habit_dashboard():
     today_date = datetime.utcnow().date()
     today = today_date.isoformat()
     progress_period = _selected_progress_period()
+
+# show each habit's start date in All My Habits and flag ones that haven't started
+    for habit in habits:
+        start_date = habit.get("start_date")
+        habit["upcoming"] = bool(start_date) and start_date > today
+        if start_date:
+            habit["start_label"] = date.fromisoformat(start_date).strftime("%B %d, %Y")
+
+    try:
+        progress_period = int(request.args.get("period", 7))
+    except ValueError:
+        progress_period = 7
+    if progress_period not in VALID_PROGRESS_PERIODS:
+        progress_period = 7
 
     overall_progress = calculate_overall_progress(
         habits, end_date=today_date, period_days=progress_period
@@ -834,6 +884,7 @@ def edit_habit(habit_id):
         return redirect(url_for("login"))
 
     query, habit = _owned_habit(habit_id)
+    today = datetime.utcnow().date()
     errors = []
     form = {
         "name": habit.get("name", ""),
@@ -843,6 +894,7 @@ def edit_habit(habit_id):
         "reminder_enabled": habit.get("reminder_enabled", False),
         "reminder_time": habit.get("reminder_time") or "",
         "reminder_timezone": habit.get("reminder_timezone") or "UTC",
+        "start_date": habit.get("start_date") or "",
     }
 
     if request.method == "POST":
@@ -851,6 +903,11 @@ def edit_habit(habit_id):
         form["reminder_enabled"] = request.form.get("reminder_enabled") == "on"
 
         errors, target = _validate_habit_form(form, max_name_length=100)
+        start_date, start_date_error = _parse_start_date(
+            form["start_date"], today, current=habit.get("start_date")
+        )
+        if start_date_error:
+            errors.append(start_date_error)
 
         if not errors:
             result = get_db()["habits"].update_one(
@@ -864,6 +921,7 @@ def edit_habit(habit_id):
                         "reminder_enabled": form["reminder_enabled"],
                         "reminder_time": form["reminder_time"] or None,
                         "reminder_timezone": form["reminder_timezone"] or "UTC",
+                        "start_date": start_date,
                     }
                 },
             )
@@ -879,6 +937,7 @@ def edit_habit(habit_id):
         frequency_choices=FREQUENCY_CHOICES,
         editing=True,
         habit_id=habit_id,
+        today=today.isoformat(),
         habit_csrf_token=_habit_form_token(),
     ), (400 if errors else 200)
 
