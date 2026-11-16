@@ -148,6 +148,9 @@ def home():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     """Render the login screen and authenticate an existing user."""
+    if session.get("user_id") and session.get("user_email"):
+        return redirect(url_for("habit_dashboard"))
+
     error = None
     email = ""
 
