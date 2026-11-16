@@ -53,9 +53,9 @@ reminders will not be added to the bell or sent as push notifications. On
 Windows, configure Task Scheduler to run the command every minute from the
 repository directory while the app is deployed.
 
-The worker sends reminders only on each habit's scheduled days, uses the
-saved browser time zone, and stores delivery keys in MongoDB to prevent
-duplicates. Every due reminder is also stored in the dashboard Notification
+The worker sends reminders only on each habit's scheduled days, skips habits
+that are on a break, uses the saved browser time zone, and stores delivery
+keys in MongoDB to prevent duplicates. Every due reminder is also stored in the dashboard Notification
 Center, even when browser push permission is denied or unsupported.
 
 ## Running Tests

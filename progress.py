@@ -11,6 +11,12 @@ of each month for monthly habits (clamped to the last day when needed).
 occurrences count toward the numerator. Skipped, missed, and undone statuses
 remain in the denominator and count as incomplete; an undone record supersedes
 an earlier completion for the same date.
+
+Habits can be put on a break. Each break is stored in the habit's ``breaks``
+list as ``{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}`` (both days included,
+UTC dates like ``completed_dates``). Days on a break are neutral: they drop out
+of the schedule unless the habit was completed anyway, so a break never lowers
+progress and never breaks a streak.
 """
 
 from calendar import monthrange
@@ -56,6 +62,17 @@ def is_scheduled_on(habit, on_date):
     return bool(_scheduled_dates(habit, on_date, on_date))
 
 
+def current_break(habit, on_date):
+    """Return the break that covers ``on_date``, or None when the habit isn't on one."""
+    day = on_date.isoformat()
+    for habit_break in habit.get("breaks") or []:
+        start = habit_break.get("start")
+        end = habit_break.get("end")
+        if isinstance(start, str) and isinstance(end, str) and start <= day <= end:
+            return habit_break
+    return None
+
+
 def _completion_counts(habit):
     counts = {}
     history = habit.get("completion_history") or []
@@ -93,8 +110,11 @@ def calculate_overall_progress(habits, end_date=None, period_days=7):
         target = max(int(habit.get("target", 1)), 1)
         completion_counts = _completion_counts(habit)
         for occurrence_date in _scheduled_dates(habit, start_date, end_date):
+            count = completion_counts.get(occurrence_date, 0)
+            if not count and current_break(habit, occurrence_date):
+                continue
             scheduled += target
-            completed += min(completion_counts.get(occurrence_date, 0), target)
+            completed += min(count, target)
 
     percentage = round(completed / scheduled * 100) if scheduled else 0
     return {

@@ -27,10 +27,11 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from models import FREQUENCY_CHOICES, HABIT_FILE_FIELDS
+from models import FREQUENCY_CHOICES, HABIT_FILE_FIELDS, PAUSE_DURATIONS
 from progress import (
     VALID_PROGRESS_PERIODS,
     calculate_overall_progress,
+    current_break,
 )
 
 
@@ -251,6 +252,10 @@ def is_due_today(habit, today):
     completed = {d for d in habit.get("completed_dates", []) if isinstance(d, str)}
     skipped = {d for d in habit.get("skipped_dates", []) if isinstance(d, str)}
 
+    # a habit on a break leaves the list, unless it was already finished before the break
+    if current_break(habit, today):
+        return today_iso in completed
+
     # keep habits finished or skipped today on the list so they show their status
     if today_iso in completed or today_iso in skipped:
         return True
@@ -259,6 +264,14 @@ def is_due_today(habit, today):
     start_iso = _period_start(habit.get("frequency") or "daily", today).isoformat()
     completed_this_period = sum(1 for d in completed if start_iso <= d <= today_iso)
     return completed_this_period < (habit.get("target") or 1)
+
+
+def _resume_date(habit, today):
+    """First day a habit on a break is active again, or None when it isn't on a break."""
+    habit_break = current_break(habit, today)
+    if habit_break is None:
+        return None
+    return date.fromisoformat(habit_break["end"]) + timedelta(days=1)
 
 
 @app.route("/dashboard")
@@ -288,6 +301,9 @@ def habit_dashboard():
     completion_by_id = {habit["id"]: today in habit.get("completed_dates", []) for habit in habits}
 
     skipped_by_id = {habit["id"]: today in habit.get("skipped_dates", []) for habit in habits}
+
+    resume_by_id = {habit["id"]: _resume_date(habit, today_date) for habit in habits}
+    on_break_count = sum(1 for resume_date in resume_by_id.values() if resume_date)
 
     completed_today = sum(completion_by_id[habit["id"]] for habit in todays_habits)
     skipped_today = sum(skipped_by_id[habit["id"]] for habit in todays_habits)
@@ -319,6 +335,8 @@ def habit_dashboard():
         todays_habits=todays_habits,
         completion_by_id=completion_by_id,
         skipped_by_id=skipped_by_id,
+        resume_by_id=resume_by_id,
+        on_break_count=on_break_count,
         total_habits=total_habits,
         completed_today=completed_today,
         skipped_today=skipped_today,
@@ -326,7 +344,8 @@ def habit_dashboard():
         completion_percentage=completion_percentage,
         overall_progress=overall_progress,
         progress_periods=VALID_PROGRESS_PERIODS,
-        # Not built yet. Team rule: a skipped day neither breaks nor extends a streak.
+        # Not built yet. Team rule: a skipped day neither breaks nor extends a streak, and
+        # neither does a day on a break (use progress.current_break to spot those).
         current_streak=None,
         today=today,
         habit_csrf_token=_habit_form_token(),
@@ -587,6 +606,9 @@ def complete_habit(habit_id):
 
     if habit.get("status", "active") in INACTIVE_STATUSES:
         return jsonify({"error": "Habit is inactive"}), 409
+
+    if current_break(habit, today):
+        return jsonify({"error": "Habit is on a break"}), 409
 
     if today_str in habit.get("completed_dates", []):
         return jsonify({"error": "Already completed today"}), 409
@@ -884,6 +906,88 @@ def unskip_habit(habit_id):
 
     today = datetime.utcnow().date().isoformat()
     get_db()["habits"].update_one(query, {"$pull": {"skipped_dates": today}})
+    return redirect(url_for("habit_dashboard"))
+
+
+@app.route("/habits/<habit_id>/pause", methods=["GET", "POST"])
+def pause_habit(habit_id):
+    """Put an owned habit on a break for a chosen number of days, starting today.
+
+    Completion and skip history are left untouched, so streak data stays frozen.
+    """
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    query, habit = _owned_habit(habit_id)
+    today = datetime.utcnow().date()
+    if current_break(habit, today):
+        flash("This habit is already on a break.", "error")
+        return redirect(url_for("habit_dashboard"))
+
+    error = None
+    if request.method == "POST":
+        _validate_habit_form_token()
+        try:
+            days = int(request.form.get("days", ""))
+        except ValueError:
+            days = 0
+
+        if days not in PAUSE_DURATIONS:
+            error = "Choose how long the break should last."
+        else:
+            end = today + timedelta(days=days - 1)
+            get_db()["habits"].update_one(
+                query,
+                {"$push": {"breaks": {"start": today.isoformat(), "end": end.isoformat()}}},
+            )
+            resume = end + timedelta(days=1)
+            flash(
+                f"“{habit.get('name', 'This habit')}” is on a break. "
+                f"It will be back on {resume:%B %d, %Y}.",
+                "success",
+            )
+            return redirect(url_for("habit_dashboard"))
+
+    return render_template(
+        "apps/habit_tracker/pause.html",
+        habit=habit,
+        habit_id=habit_id,
+        pause_options=[
+            (days, label, today + timedelta(days=days)) for days, label in PAUSE_DURATIONS.items()
+        ],
+        error=error,
+        habit_csrf_token=_habit_form_token(),
+    ), (400 if error else 200)
+
+
+@app.route("/habits/<habit_id>/resume", methods=["POST"])
+def resume_habit(habit_id):
+    """End an owned habit's break early so it is active again from today."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    query, habit = _owned_habit(habit_id)
+    _validate_habit_form_token()
+
+    today = datetime.utcnow().date()
+    if not current_break(habit, today):
+        flash("This habit isn't on a break.", "error")
+        return redirect(url_for("habit_dashboard"))
+
+    # Cut the current break off at yesterday. Past breaks stay recorded so they
+    # keep counting as neutral days for progress and streaks.
+    today_iso = today.isoformat()
+    yesterday = (today - timedelta(days=1)).isoformat()
+    breaks = []
+    for habit_break in habit.get("breaks") or []:
+        if habit_break["end"] >= today_iso:
+            if habit_break["start"] >= today_iso:
+                continue  # the break only started today, so nothing is left of it
+            habit_break = {**habit_break, "end": yesterday}
+        breaks.append(habit_break)
+
+    get_db()["habits"].update_one(query, {"$set": {"breaks": breaks}})
+    flash(f"Welcome back! “{habit.get('name', 'This habit')}” is active again.", "success")
     return redirect(url_for("habit_dashboard"))
 
 
