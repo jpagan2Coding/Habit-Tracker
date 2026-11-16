@@ -887,6 +887,40 @@ def unskip_habit(habit_id):
     return redirect(url_for("habit_dashboard"))
 
 
+@app.route("/account/delete", methods=["GET", "POST"])
+@app.route("/account/delete-account", methods=["GET", "POST"])
+def delete_account():
+    """Delete the authenticated account and every record tied to it."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    user_email = session["user_email"]
+    user_id = session.get("user_id")
+    query = {"user_email": user_email}
+
+    if request.method == "POST":
+        _validate_habit_form_token()
+        db = get_db()
+        db["habits"].delete_many(query)
+        db["notifications"].delete_many(query)
+        db["push_subscriptions"].delete_many(query)
+
+        user_filter = {"email": user_email}
+        if user_id and ObjectId.is_valid(user_id):
+            user_filter = {"$or": [{"_id": ObjectId(user_id)}, {"email": user_email}]}
+        db["users"].delete_one(user_filter)
+
+        session.clear()
+        flash("Your account and all of your data have been deleted.", "success")
+        return redirect(url_for("home"))
+
+    return render_template(
+        "account/delete_account.html",
+        habit_count=get_db()["habits"].count_documents(query),
+        habit_csrf_token=_habit_form_token(),
+    )
+
+
 @app.route("/account/delete-data", methods=["GET", "POST"])
 def delete_account_data():
     """Wipe the user's habits (and the completion history stored on them) but keep the account."""
