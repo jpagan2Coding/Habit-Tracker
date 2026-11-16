@@ -36,8 +36,8 @@ def seeded_habits(habits):
     )
 
 
-def form_token(client):
-    response = client.get("/account/delete-data")
+def form_token(client, path="/account/delete-data"):
+    response = client.get(path)
     assert response.status_code == 200
 
     with client.session_transaction() as session:
@@ -73,6 +73,33 @@ def test_delete_wipes_habits_and_history_but_keeps_account(
 
     with client.session_transaction() as session:
         assert session["user_email"] == OWNER_EMAIL
+
+
+def test_delete_account_confirmation_page_shows_account_warning(client, logged_in, seeded_habits):
+    response = client.get("/account/delete")
+
+    assert response.status_code == 200
+    assert b"Delete My Account?" in response.data
+    assert b"all 2 of your habits" in response.data
+
+
+def test_delete_account_removes_user_and_all_data(client, mongo_client, habits, logged_in, seeded_habits):
+    users = mongo_client["Habit-Tracker_test"]["users"]
+    token = form_token(client, "/account/delete")
+
+    response = client.post(
+        "/account/delete",
+        data={"csrf_token": token},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/")
+    assert users.find_one({"email": OWNER_EMAIL}) is None
+    assert habits.count_documents({"user_email": OWNER_EMAIL}) == 0
+
+    with client.session_transaction() as session:
+        assert "user_email" not in session
 
 
 def test_delete_leaves_other_users_data(client, habits, logged_in, seeded_habits):
