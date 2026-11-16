@@ -3,7 +3,7 @@ import io
 import os
 import secrets
 from datetime import date, datetime, timedelta, timezone
-from functools import wraps
+from functools import lru_cache, wraps
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -106,11 +106,18 @@ def _mongo_client_options(mongo_uri):
     unless pymongo is pointed at certifi's bundle. Plain mongodb:// URIs (a local
     mongod) are left untouched because tlsCAFile would force TLS on.
     """
-    options = {"serverSelectionTimeoutMS": 5000}
+    options = {"serverSelectionTimeoutMS": 30000}
     lowered = mongo_uri.lower()
     if lowered.startswith("mongodb+srv://") or "tls=true" in lowered or "ssl=true" in lowered:
         options["tlsCAFile"] = certifi.where()
     return options
+
+
+@lru_cache(maxsize=1)
+def _get_mongo_client(mongo_uri):
+    return MongoClient(
+        mongo_uri, **_mongo_client_options(mongo_uri)
+    )
 
 
 def get_db():
@@ -119,7 +126,7 @@ def get_db():
     if not mongo_uri:
         raise RuntimeError("MONGODB_URI is not configured")
 
-    client = MongoClient(mongo_uri, **_mongo_client_options(mongo_uri))
+    client = _get_mongo_client(mongo_uri)
     return client[os.getenv("MONGODB_DATABASE", "Habit-Tracker")]
 
 
