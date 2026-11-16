@@ -217,3 +217,152 @@ def test_invalid_habit_id_returns_404(client, owned_habit, action):
     response = client.get(f"/habits/not-an-object-id/{action}")
 
     assert response.status_code == 404
+
+
+def test_bulk_delete_removes_only_selected_owned_habits(
+    client, habits, owned_habit
+):
+    token = form_token(client, owned_habit)
+    original = habits.find_one({"_id": owned_habit})
+
+    second = dict(original)
+    second.pop("_id")
+    second["name"] = "Second Selected Habit"
+    second_id = habits.insert_one(second).inserted_id
+
+    unselected = dict(second)
+    unselected.pop("_id", None)
+    unselected["name"] = "Keep This Habit"
+    unselected_id = habits.insert_one(unselected).inserted_id
+
+    response = client.post(
+        "/habits/delete-selected",
+        data={
+            "csrf_token": token,
+            "habit_ids": [str(owned_habit), str(second_id)],
+        },
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/dashboard")
+    assert habits.find_one({"_id": owned_habit}) is None
+    assert habits.find_one({"_id": second_id}) is None
+    assert habits.find_one({"_id": unselected_id}) is not None
+
+    with client.session_transaction() as session:
+        assert (
+            "success",
+            "2 habits deleted successfully.",
+        ) in session.get("_flashes", [])
+
+
+def test_bulk_delete_preserves_other_users_habits(
+    client, habits, owned_habit
+):
+    token = form_token(client, owned_habit)
+
+    other = dict(habits.find_one({"_id": owned_habit}))
+    other.pop("_id")
+    other["user_email"] = "another@example.com"
+    other_id = habits.insert_one(other).inserted_id
+
+    response = client.post(
+        "/habits/delete-selected",
+        data={
+            "csrf_token": token,
+            "habit_ids": [str(owned_habit), str(other_id)],
+        },
+    )
+
+    assert response.status_code == 302
+    assert habits.find_one({"_id": owned_habit}) is None
+    assert habits.find_one({"_id": other_id}) is not None
+
+
+@pytest.mark.parametrize("token", [None, "incorrect-token"])
+def test_bulk_delete_requires_valid_csrf(
+    client, habits, owned_habit, token
+):
+    form_token(client, owned_habit)
+    original = habits.find_one({"_id": owned_habit})
+    data = {"habit_ids": [str(owned_habit)]}
+
+    if token is not None:
+        data["csrf_token"] = token
+
+    response = client.post("/habits/delete-selected", data=data)
+
+    assert response.status_code == 400
+    assert habits.find_one({"_id": owned_habit}) == original
+
+
+def test_bulk_delete_requires_login(client, habits, owned_habit):
+    original = habits.find_one({"_id": owned_habit})
+
+    with client.session_transaction() as session:
+        session.clear()
+
+    response = client.post(
+        "/habits/delete-selected",
+        data={"habit_ids": [str(owned_habit)]},
+    )
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/login")
+    assert habits.find_one({"_id": owned_habit}) == original
+
+
+def test_bulk_delete_empty_selection_preserves_habits(
+    client, habits, owned_habit
+):
+    token = form_token(client, owned_habit)
+    original = habits.find_one({"_id": owned_habit})
+
+    response = client.post(
+        "/habits/delete-selected",
+        data={"csrf_token": token},
+    )
+
+    assert response.status_code == 302
+    assert habits.find_one({"_id": owned_habit}) == original
+
+
+def test_bulk_delete_invalid_id_prevents_all_deletion(
+    client, habits, owned_habit
+):
+    token = form_token(client, owned_habit)
+    original = habits.find_one({"_id": owned_habit})
+
+    response = client.post(
+        "/habits/delete-selected",
+        data={
+            "csrf_token": token,
+            "habit_ids": [str(owned_habit), "not-an-object-id"],
+        },
+    )
+
+    assert response.status_code == 400
+    assert habits.find_one({"_id": owned_habit}) == original
+
+
+def test_bulk_delete_duplicate_ids_count_once(
+    client, habits, owned_habit
+):
+    token = form_token(client, owned_habit)
+
+    response = client.post(
+        "/habits/delete-selected",
+        data={
+            "csrf_token": token,
+            "habit_ids": [str(owned_habit), str(owned_habit)],
+        },
+    )
+
+    assert response.status_code == 302
+    assert habits.find_one({"_id": owned_habit}) is None
+
+    with client.session_transaction() as session:
+        assert (
+            "success",
+            "1 habit deleted successfully.",
+        ) in session.get("_flashes", [])
