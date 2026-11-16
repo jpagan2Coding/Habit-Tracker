@@ -683,12 +683,21 @@
 
 
                                 <td class="whitespace-nowrap px-5 py-4 text-sm text-slate-500">
+                                    {% if habit.start_label %}
+                                    {{ habit.start_label }}
+                                    {% else %}
                                     {{ habit.created_at.strftime('%B %d, %Y') }}
+                                    {% endif %}
                                 </td>
 
 
                                 <td class="px-5 py-4">
-                                    {% if completion_by_id[habit.id] %}
+                                    {% if habit.upcoming %}
+                                    <span
+                                        class="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+                                        Upcoming
+                                    </span>
+                                    {% elif completion_by_id[habit.id] %}
                                     <span
                                         class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
                                         Complete
