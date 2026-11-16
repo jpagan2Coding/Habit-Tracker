@@ -30,10 +30,7 @@ def mongo_client(monkeypatch):
         }
     )
 
-    monkeypatch.setattr(
-        "app.MongoClient",
-        lambda *args, **kwargs: client
-    )
+    monkeypatch.setattr("app.MongoClient", lambda *args, **kwargs: client)
     monkeypatch.setenv("MONGODB_URI", "mongodb://mocked-ci-only")
     monkeypatch.setenv("MONGODB_DATABASE", "Habit-Tracker_test")
 

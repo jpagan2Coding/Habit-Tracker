@@ -105,3 +105,149 @@ def calculate_overall_progress(habits, end_date=None, period_days=7):
         "completed": completed,
         "percentage": percentage,
     }
+
+
+# Per-habit summary metrics.
+#
+# A habit is measured in periods that match its frequency: days, Monday-start
+# weeks, or calendar months (the same periods the "Today's Habits" list uses).
+# A period is "met" once its target is reached. Team rule: a skipped day neither
+# breaks nor extends a streak, so each skip lowers that period's target by one,
+# and a period whose target was skipped away entirely is passed over. The
+# current period never breaks a streak while it is still in progress.
+
+PERIOD_UNITS = {"daily": "day", "weekly": "week", "monthly": "month"}
+
+
+def period_start(frequency, day):
+    """Return the first day of the day, week (Monday), or month containing ``day``."""
+    if frequency == "weekly":
+        return day - timedelta(days=day.weekday())
+    if frequency == "monthly":
+        return day.replace(day=1)
+    return day
+
+
+def _next_period_start(frequency, start):
+    if frequency == "weekly":
+        return start + timedelta(days=7)
+    if frequency == "monthly":
+        return (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return start + timedelta(days=1)
+
+
+def _frequency(habit):
+    frequency = habit.get("frequency")
+    return frequency if frequency in PERIOD_UNITS else "daily"
+
+
+def _skipped_dates(habit):
+    skipped = {_as_date(value) for value in habit.get("skipped_dates") or []}
+    for record in habit.get("completion_history") or []:
+        if isinstance(record, dict) and record.get("status") == "skipped":
+            skipped.add(_as_date(record.get("date")))
+    skipped.discard(None)
+    return skipped
+
+
+def _totals_by_period(frequency, day_counts):
+    totals = {}
+    for day, count in day_counts:
+        key = period_start(frequency, day)
+        totals[key] = totals.get(key, 0) + count
+    return totals
+
+
+def habit_periods(habit, today):
+    """Return one entry per period, oldest first, up to the period containing ``today``.
+
+    Periods start from the one the habit began in (its creation date, or its
+    earliest logged day if that is older). Each entry has ``start``, ``end``,
+    ``completed``, ``skipped``, ``target``, and a ``status`` of ``met``,
+    ``missed``, ``skipped`` (every needed occurrence was skipped), or
+    ``in_progress`` (the current period, target not reached yet).
+    """
+    frequency = _frequency(habit)
+    target = max(int(habit.get("target") or 1), 1)
+    counts = _completion_counts(habit)
+    # a completion replaces a skip on the same day
+    skipped_days = {day for day in _skipped_dates(habit) if not counts.get(day)}
+    completed_by_period = _totals_by_period(frequency, counts.items())
+    skipped_by_period = _totals_by_period(frequency, ((day, 1) for day in skipped_days))
+
+    logged_days = [day for day, count in counts.items() if count] + list(skipped_days)
+    first_day = min([_as_date(habit.get("created_at")) or today, today, *logged_days])
+    start = period_start(frequency, first_day)
+    current = period_start(frequency, today)
+
+    periods = []
+    while start <= current:
+        next_start = _next_period_start(frequency, start)
+        completed = completed_by_period.get(start, 0)
+        skipped = skipped_by_period.get(start, 0)
+        needed = target - skipped
+        if completed and completed >= needed:
+            status = "met"
+        elif needed <= 0:
+            status = "skipped"
+        elif start == current:
+            status = "in_progress"
+        else:
+            status = "missed"
+        periods.append(
+            {
+                "start": start,
+                "end": next_start - timedelta(days=1),
+                "completed": completed,
+                "skipped": skipped,
+                "target": target,
+                "status": status,
+            }
+        )
+        start = next_start
+    return periods
+
+
+def streaks(periods):
+    """Return ``(current, longest)`` streak lengths, counted in periods."""
+    current = longest = 0
+    for period in periods:
+        if period["status"] == "met":
+            current += 1
+            longest = max(longest, current)
+        elif period["status"] == "missed":
+            current = 0
+    return current, longest
+
+
+def habit_summary(habit, today, period_days=7):
+    """Return the streaks and completion rate shown for one habit on the summary page.
+
+    ``has_history`` stays False until the habit has been logged at least once or
+    one full period has gone by since it started. The completion rate covers the
+    periods overlapping the last ``period_days`` days: skipped occurrences count
+    as incomplete (as in overall progress), and the current period only counts
+    once its target is met, so an unfinished day or week isn't held against you.
+    """
+    if period_days not in VALID_PROGRESS_PERIODS:
+        raise ValueError("period_days must be one of 7, 30, or 90")
+
+    periods = habit_periods(habit, today)
+    current_streak, longest_streak = streaks(periods)
+    window_start = today - timedelta(days=period_days - 1)
+    recent = [period for period in periods if period["end"] >= window_start]
+    counted = [period for period in recent if period["status"] != "in_progress"]
+    expected = sum(period["target"] for period in counted)
+    completed = sum(min(period["completed"], period["target"]) for period in counted)
+
+    return {
+        "unit": PERIOD_UNITS[_frequency(habit)],
+        "has_history": len(periods) > 1
+        or any(period["completed"] or period["skipped"] for period in periods),
+        "current_streak": current_streak,
+        "longest_streak": longest_streak,
+        "completed": completed,
+        "expected": expected,
+        "percentage": round(completed / expected * 100) if expected else None,
+        "periods": recent,
+    }

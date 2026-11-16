@@ -83,7 +83,9 @@ def test_delete_account_confirmation_page_shows_account_warning(client, logged_i
     assert b"all 2 of your habits" in response.data
 
 
-def test_delete_account_removes_user_and_all_data(client, mongo_client, habits, logged_in, seeded_habits):
+def test_delete_account_removes_user_and_all_data(
+    client, mongo_client, habits, logged_in, seeded_habits
+):
     users = mongo_client["Habit-Tracker_test"]["users"]
     token = form_token(client, "/account/delete")
 

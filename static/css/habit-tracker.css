@@ -59,3 +59,46 @@
         margin: -2rem;
     }
 }
+
+/* Summary page history strip: one cell per day, week, or month. Colors were checked for
+   color-blind separation; meaning is also given by the legend, tooltips, and aria-label. */
+.habit-history {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+
+.habit-history-cell {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    border: 1px solid transparent;
+    border-radius: 3px;
+}
+
+.habit-history-week {
+    width: 22px;
+}
+
+.habit-history-month {
+    width: 32px;
+}
+
+.habit-history-met {
+    background: #059669;
+}
+
+.habit-history-skipped {
+    background: #fbbf24;
+    border-color: #d97706;
+}
+
+.habit-history-missed {
+    background: #cbd5e1;
+}
+
+.habit-history-in_progress {
+    background: #ffffff;
+    border: 1px dashed #64748b;
+}

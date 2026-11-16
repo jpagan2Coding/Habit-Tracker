@@ -1,4 +1,3 @@
-
 """Tests for the Undo Habit Completion feature."""
 
 from datetime import datetime, timedelta, timezone
@@ -70,12 +69,8 @@ def test_successful_undo(logged_in_client, habits, completed_habit):
     assert habit["status"] == "active"
 
 
-def test_undo_preserves_previous_history(
-    logged_in_client, habits, completed_habit, today
-):
-    yesterday = (
-        datetime.now(timezone.utc).date() - timedelta(days=1)
-    ).isoformat()
+def test_undo_preserves_previous_history(logged_in_client, habits, completed_habit, today):
+    yesterday = (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat()
 
     habits.update_one(
         {"_id": ObjectId(completed_habit)},
@@ -107,9 +102,7 @@ def test_logged_out_user_cannot_undo(client, completed_habit):
     assert response.status_code == 401
 
 
-def test_cannot_undo_another_users_habit(
-    logged_in_client, habits, today
-):
+def test_cannot_undo_another_users_habit(logged_in_client, habits, today):
     result = habits.insert_one(
         {
             "name": "Private Habit",
@@ -141,24 +134,18 @@ def test_nonexistent_habit(logged_in_client):
 
 
 def test_missing_csrf_token(logged_in_client, completed_habit):
-    response = logged_in_client.post(
-        f"/habits/{completed_habit}/uncomplete"
-    )
+    response = logged_in_client.post(f"/habits/{completed_habit}/uncomplete")
 
     assert response.status_code == 400
 
 
 def test_invalid_csrf_token(logged_in_client, completed_habit):
-    response = undo(
-        logged_in_client, completed_habit, token="wrong-token"
-    )
+    response = undo(logged_in_client, completed_habit, token="wrong-token")
 
     assert response.status_code == 400
 
 
-def test_can_complete_again_after_undo(
-    logged_in_client, habits, completed_habit, today
-):
+def test_can_complete_again_after_undo(logged_in_client, habits, completed_habit, today):
     undo_response = undo(logged_in_client, completed_habit)
     complete_response = complete(logged_in_client, completed_habit)
 
@@ -169,9 +156,7 @@ def test_can_complete_again_after_undo(
     assert habit["completed_dates"] == [today]
 
 
-def test_dashboard_updates_after_undo(
-    logged_in_client, completed_habit
-):
+def test_dashboard_updates_after_undo(logged_in_client, completed_habit):
     before = logged_in_client.get("/dashboard").get_data(as_text=True)
 
     assert f"/habits/{completed_habit}/uncomplete" in before
@@ -193,9 +178,7 @@ def test_dashboard_updates_after_undo(
     assert "line-through" not in todays_habits
 
 
-def test_all_habits_status_updates(
-    logged_in_client, completed_habit
-):
+def test_all_habits_status_updates(logged_in_client, completed_habit):
     before = logged_in_client.get("/dashboard").get_data(as_text=True)
     before_table = before.split("<!-- All My Habits -->", 1)[1]
 
@@ -210,9 +193,7 @@ def test_all_habits_status_updates(
     assert ">Complete<" not in "".join(after_table.split())
 
 
-def test_daily_progress_updates_after_undo(
-    logged_in_client, completed_habit
-):
+def test_daily_progress_updates_after_undo(logged_in_client, completed_habit):
     before = logged_in_client.get("/dashboard").get_data(as_text=True)
     assert "Out of 1 · 100%" in before
 
@@ -222,9 +203,7 @@ def test_daily_progress_updates_after_undo(
     assert "Out of 1 · 0%" in after
 
 
-def test_undo_does_not_create_skip(
-    logged_in_client, habits, completed_habit
-):
+def test_undo_does_not_create_skip(logged_in_client, habits, completed_habit):
     response = undo(logged_in_client, completed_habit)
 
     assert response.status_code == 200
@@ -235,9 +214,7 @@ def test_undo_does_not_create_skip(
 
 
 @pytest.mark.parametrize("frequency", ["daily", "weekly", "monthly"])
-def test_undo_supported_frequencies(
-    logged_in_client, habits, completed_habit, frequency
-):
+def test_undo_supported_frequencies(logged_in_client, habits, completed_habit, frequency):
     habits.update_one(
         {"_id": ObjectId(completed_habit)},
         {"$set": {"frequency": frequency}},
