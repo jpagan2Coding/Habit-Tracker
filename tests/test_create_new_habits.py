@@ -1,6 +1,5 @@
 import pytest
 
-
 VALID_HABIT = {
     "name": "Drink Water",
     "description": "8 glasses a day",

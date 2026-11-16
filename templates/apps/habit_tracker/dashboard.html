@@ -427,7 +427,20 @@
 
                             <!-- Habit actions -->
                             <div class="flex flex-wrap items-center gap-2">
-                                {% if not is_completed %}
+                                {% if is_completed %}
+                                <form class="complete-habit-form"
+                                    action="{{ url_for('uncomplete_habit', habit_id=habit.id) }}"
+                                    method="POST">
+                                    <input type="hidden"
+                                        name="csrf_token"
+                                        value="{{ habit_csrf_token }}">
+
+                                    <button type="submit"
+                                            class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
+                                        Undo
+                                    </button>
+                                </form>
+                                {% else %}
                                 <form class="complete-habit-form"
                                     action="{{ url_for('complete_habit', habit_id=habit.id) }}"
                                     method="POST">
@@ -588,10 +601,22 @@
 
 
                                 <td class="px-5 py-4">
+                                    {% if completion_by_id[habit.id] %}
+                                    <span
+                                        class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                                        Complete
+                                    </span>
+                                    {% elif skipped_by_id[habit.id] %}
+                                    <span
+                                        class="rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                                        Skipped
+                                    </span>
+                                    {% else %}
                                     <span
                                         class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
                                         Active
                                     </span>
+                                    {% endif %}
                                 </td>
 
 
@@ -655,7 +680,7 @@ document.querySelectorAll(".complete-habit-form").forEach(form => {
             if (response.ok) {
                 window.location.reload();
             } else {
-                alert(result.error || "Unable to complete habit.");
+                alert(result.error || "Unable to update habit completion.");
                 button.disabled = false;
             }
         } catch (error) {

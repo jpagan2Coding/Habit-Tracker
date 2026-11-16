@@ -3,7 +3,7 @@ import io
 import os
 import secrets
 from datetime import date, datetime, timedelta, timezone
-from functools import wraps
+from functools import lru_cache, wraps
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -106,11 +106,18 @@ def _mongo_client_options(mongo_uri):
     unless pymongo is pointed at certifi's bundle. Plain mongodb:// URIs (a local
     mongod) are left untouched because tlsCAFile would force TLS on.
     """
-    options = {"serverSelectionTimeoutMS": 5000}
+    options = {"serverSelectionTimeoutMS": 30000}
     lowered = mongo_uri.lower()
     if lowered.startswith("mongodb+srv://") or "tls=true" in lowered or "ssl=true" in lowered:
         options["tlsCAFile"] = certifi.where()
     return options
+
+
+@lru_cache(maxsize=1)
+def _get_mongo_client(mongo_uri):
+    return MongoClient(
+        mongo_uri, **_mongo_client_options(mongo_uri)
+    )
 
 
 def get_db():
@@ -119,7 +126,7 @@ def get_db():
     if not mongo_uri:
         raise RuntimeError("MONGODB_URI is not configured")
 
-    client = MongoClient(mongo_uri, **_mongo_client_options(mongo_uri))
+    client = _get_mongo_client(mongo_uri)
     return client[os.getenv("MONGODB_DATABASE", "Habit-Tracker")]
 
 
@@ -618,6 +625,42 @@ def complete_habit(habit_id):
         }
     ), 200
 
+@app.route("/habits/<habit_id>/uncomplete", methods=["POST"])
+def uncomplete_habit(habit_id):
+    """Undo today's completion for the authenticated user's habit."""
+
+    if not session.get("user_id") or not session.get("user_email"):
+        return jsonify({"error": "Login required"}), 401
+
+    _validate_habit_form_token()
+
+    query, habit = _owned_habit(habit_id)
+    today_str = datetime.now(timezone.utc).date().isoformat()
+
+    if today_str not in habit.get("completed_dates", []):
+        return jsonify({"error": "Habit is not completed today"}), 409
+
+    result = get_db()["habits"].update_one(
+        {
+            **query,
+            "completed_dates": today_str,
+        },
+        {
+            "$pull": {"completed_dates": today_str},
+        },
+    )
+
+    if result.modified_count == 0:
+        return jsonify({"error": "Completion not removed"}), 409
+
+    return jsonify(
+        {
+            "habit_id": habit_id,
+            "completed": False,
+            "completed_date": today_str,
+            "message": "Habit completion undone",
+        }
+    ), 200
 
 def _parse_history_row(row):
     if row["completed_date"]:
