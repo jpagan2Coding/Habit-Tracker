@@ -46,6 +46,15 @@ Debug mode provides:
 - Detailed error pages
 - Interactive debugger in the browser
 
+### Simulating the App Date
+
+The Settings page includes a developer clock while Flask debug mode is active.
+To enable it without debug mode, set `DEV_TIME_TRAVEL_ENABLED=1` in the
+development environment. The selected date applies only to the current browser
+session and affects habit schedules and completion dates; the time of day and
+database audit timestamps continue to use real UTC time. Choose **Use actual
+date** to turn the override off.
+
 ### Development Server
 
 ```bash

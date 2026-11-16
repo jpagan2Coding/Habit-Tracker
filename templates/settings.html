@@ -49,6 +49,33 @@
                 Delete Account
             </a>
         </div>
+
+        {% if dev_time_travel_enabled %}
+        <section class="mt-8 border-t border-slate-200 pt-6" aria-labelledby="dev-clock-heading">
+            <h2 id="dev-clock-heading" class="text-lg font-bold text-slate-900">Developer clock</h2>
+            <p class="mt-1 text-sm text-slate-600">
+                Temporarily change the date used for habit schedules and completion history.
+                This only affects your current session; the time of day remains real.
+            </p>
+
+            <form method="POST" action="{{ url_for('set_dev_clock') }}" class="mt-4 flex flex-wrap items-end gap-3">
+                <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
+                <label for="simulated-date" class="flex flex-col gap-2 text-sm font-semibold text-slate-700">
+                    App date
+                    <input id="simulated-date" name="simulated_date" type="date" value="{{ simulated_date }}" required
+                           class="rounded-lg border border-slate-300 px-3 py-2 font-normal">
+                </label>
+                <button type="submit"
+                        class="rounded-lg bg-blue-950 px-5 py-3 font-semibold text-white hover:bg-blue-900">
+                    Set date
+                </button>
+                <button type="submit" name="reset" value="1" formnovalidate
+                        class="rounded-lg border border-slate-300 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-50">
+                    Use actual date
+                </button>
+            </form>
+        </section>
+        {% endif %}
     </section>
 </div>
 {% endblock %}

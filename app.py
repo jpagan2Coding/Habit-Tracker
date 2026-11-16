@@ -132,6 +132,42 @@ load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+app.config["DEV_TIME_TRAVEL_ENABLED"] = os.getenv(
+    "DEV_TIME_TRAVEL_ENABLED", ""
+).strip().lower() in {"1", "true", "yes", "on"}
+
+DEV_CLOCK_SESSION_KEY = "dev_clock_date"
+
+
+def dev_time_travel_enabled():
+    return app.debug or app.config["DEV_TIME_TRAVEL_ENABLED"]
+
+
+def current_app_datetime():
+    """Return UTC now, using the session's simulated date when development mode allows it."""
+    now = datetime.now(timezone.utc)
+    if not dev_time_travel_enabled():
+        return now
+
+    simulated_date = session.get(DEV_CLOCK_SESSION_KEY)
+    if not simulated_date:
+        return now
+    try:
+        simulated_date = date.fromisoformat(simulated_date)
+    except (TypeError, ValueError):
+        app.logger.warning("Ignoring invalid simulated date in the session.")
+        session.pop(DEV_CLOCK_SESSION_KEY, None)
+        return now
+
+    return now.replace(
+        year=simulated_date.year,
+        month=simulated_date.month,
+        day=simulated_date.day,
+    )
+
+
+def current_app_date():
+    return current_app_datetime().date()
 
 
 def login_required(f):
@@ -428,7 +464,7 @@ def habit_dashboard():
         habit["id"] = str(habit["_id"])
         habit["reminder_description"] = format_reminder_schedule(habit)
 
-    today_date = datetime.utcnow().date()
+    today_date = current_app_date()
     today = today_date.isoformat()
     progress_period = _selected_progress_period()
 
@@ -686,7 +722,31 @@ def settings():
         "settings.html",
         page_id="settings",
         text_sizes=TEXT_SIZES,
+        dev_time_travel_enabled=dev_time_travel_enabled(),
+        simulated_date=session.get(DEV_CLOCK_SESSION_KEY, current_app_date().isoformat()),
+        habit_csrf_token=_habit_form_token(),
     )
+
+
+@app.route("/settings/dev-clock", methods=["POST"])
+def set_dev_clock():
+    if not dev_time_travel_enabled():
+        abort(404)
+
+    _validate_habit_form_token()
+    if request.form.get("reset"):
+        session.pop(DEV_CLOCK_SESSION_KEY, None)
+        flash("The actual date and time are restored.", "success")
+    else:
+        submitted_date = request.form.get("simulated_date", "").strip()
+        try:
+            selected_date = date.fromisoformat(submitted_date)
+        except ValueError:
+            flash("Choose a valid date.", "error")
+        else:
+            session[DEV_CLOCK_SESSION_KEY] = selected_date.isoformat()
+            flash(f"The app date is now {selected_date.isoformat()}.", "success")
+    return redirect(url_for("settings"))
 
 
 @app.route("/logout", methods=["POST"])
@@ -804,7 +864,7 @@ def complete_habit(habit_id):
     _validate_habit_form_token()
 
     query, habit = _owned_habit(habit_id)
-    today = datetime.now(timezone.utc).date()
+    today = current_app_date()
     today_str = today.isoformat()
 
     if habit.get("status", "active") in INACTIVE_STATUSES:
@@ -854,7 +914,7 @@ def uncomplete_habit(habit_id):
     _validate_habit_form_token()
 
     query, habit = _owned_habit(habit_id)
-    today_str = datetime.now(timezone.utc).date().isoformat()
+    today_str = current_app_date().isoformat()
 
     if today_str not in habit.get("completed_dates", []):
         return jsonify({"error": "Habit is not completed today"}), 409
@@ -1152,7 +1212,7 @@ def skip_habit(habit_id):
     query, habit = _owned_habit(habit_id)
     _validate_habit_form_token()
 
-    today_date = datetime.utcnow().date()
+    today_date = current_app_date()
     today = today_date.isoformat()
     if today in habit.get("completed_dates", []):
         flash("This habit is already completed today, so it can't be skipped.", "error")
@@ -1176,7 +1236,7 @@ def unskip_habit(habit_id):
     query, _ = _owned_habit(habit_id)
     _validate_habit_form_token()
 
-    today = datetime.utcnow().date().isoformat()
+    today = current_app_date().isoformat()
     get_db()["habits"].update_one(query, {"$pull": {"skipped_dates": today}})
     return redirect(url_for("habit_dashboard"))
 
