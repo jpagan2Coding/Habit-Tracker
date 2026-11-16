@@ -10,6 +10,7 @@ import mongomock
 import pytest
 from werkzeug.security import generate_password_hash
 
+from app import _get_mongo_client
 from app import app as flask_app
 
 
@@ -18,6 +19,8 @@ def mongo_client(monkeypatch):
     """
     Provide an in-memory MongoDB replacement for authentication tests.
     """
+    _get_mongo_client.cache_clear()
+
     client = mongomock.MongoClient()
     database = client["Habit-Tracker_test"]
     database["users"].insert_one(
@@ -27,10 +30,17 @@ def mongo_client(monkeypatch):
         }
     )
 
-    monkeypatch.setattr("app.MongoClient", lambda *args, **kwargs: client)
+    monkeypatch.setattr(
+        "app.MongoClient",
+        lambda *args, **kwargs: client
+    )
     monkeypatch.setenv("MONGODB_URI", "mongodb://mocked-ci-only")
     monkeypatch.setenv("MONGODB_DATABASE", "Habit-Tracker_test")
-    return client
+
+    yield client
+
+    _get_mongo_client.cache_clear()
+    client.close()
 
 
 @pytest.fixture

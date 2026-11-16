@@ -3,7 +3,7 @@ import io
 import os
 import secrets
 from datetime import date, datetime, timedelta, timezone
-from functools import wraps
+from functools import lru_cache, wraps
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -83,6 +83,27 @@ def _validate_habit_form(form, *, target_required=False, max_name_length=None):
     return errors, target
 
 
+def _parse_start_date(value, today, current=None):
+    """Check the start date from the habit form (US-23).
+
+    Returns (start_date, error). A blank field keeps the current start date,
+    and keeping a habit's existing start date is always allowed, even after
+    that date has passed. A new start date has to be today or later.
+    """
+    if not value or value == current:
+        return current, None
+
+    try:
+        start = date.fromisoformat(value)
+    except ValueError:
+        return current, "Enter a valid start date."
+
+    if start < today:
+        return current, "Start date cannot be in the past."
+
+    return start.isoformat(), None
+
+
 load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 
 app = Flask(__name__)
@@ -107,11 +128,18 @@ def _mongo_client_options(mongo_uri):
     unless pymongo is pointed at certifi's bundle. Plain mongodb:// URIs (a local
     mongod) are left untouched because tlsCAFile would force TLS on.
     """
-    options = {"serverSelectionTimeoutMS": 5000}
+    options = {"serverSelectionTimeoutMS": 30000}
     lowered = mongo_uri.lower()
     if lowered.startswith("mongodb+srv://") or "tls=true" in lowered or "ssl=true" in lowered:
         options["tlsCAFile"] = certifi.where()
     return options
+
+
+@lru_cache(maxsize=1)
+def _get_mongo_client(mongo_uri):
+    return MongoClient(
+        mongo_uri, **_mongo_client_options(mongo_uri)
+    )
 
 
 def get_db():
@@ -120,7 +148,7 @@ def get_db():
     if not mongo_uri:
         raise RuntimeError("MONGODB_URI is not configured")
 
-    client = MongoClient(mongo_uri, **_mongo_client_options(mongo_uri))
+    client = _get_mongo_client(mongo_uri)
     return client[os.getenv("MONGODB_DATABASE", "Habit-Tracker")]
 
 
@@ -142,6 +170,9 @@ def home():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     """Render the login screen and authenticate an existing user."""
+    if session.get("user_id") and session.get("user_email"):
+        return redirect(url_for("habit_dashboard"))
+
     error = None
     email = ""
 
@@ -178,6 +209,7 @@ def login():
 @app.route("/habit-tracker", methods=["GET", "POST"])
 @login_required
 def habit_tracker():
+    today = datetime.utcnow().date()
     form = {
         "name": "",
         "description": "",
@@ -186,6 +218,7 @@ def habit_tracker():
         "reminder_enabled": False,
         "reminder_time": "",
         "reminder_timezone": "UTC",
+        "start_date": today.isoformat(),
     }
     errors = []
 
@@ -199,10 +232,14 @@ def habit_tracker():
                 "reminder_enabled": request.form.get("reminder_enabled") == "on",
                 "reminder_time": request.form.get("reminder_time", "").strip(),
                 "reminder_timezone": request.form.get("reminder_timezone", "UTC").strip(),
+                "start_date": request.form.get("start_date", "").strip(),
             }
         )
 
         errors, target = _validate_habit_form(form, target_required=True)
+        start_date, start_date_error = _parse_start_date(form["start_date"], today)
+        if start_date_error:
+            errors.append(start_date_error)
 
         if not errors:
             get_db()["habits"].insert_one(
@@ -217,6 +254,8 @@ def habit_tracker():
                     "reminder_enabled": form["reminder_enabled"],
                     "reminder_time": form["reminder_time"] or None,
                     "reminder_timezone": form["reminder_timezone"] or "UTC",
+                    # a blank start date means the habit starts today
+                    "start_date": start_date or today.isoformat(),
                 }
             )
             return redirect(url_for("habit_dashboard"))
@@ -227,6 +266,7 @@ def habit_tracker():
         form=form,
         errors=errors,
         frequency_choices=FREQUENCY_CHOICES,
+        today=today.isoformat(),
     ), (400 if errors else 200)
 
 
@@ -249,6 +289,12 @@ def is_due_today(habit, today):
         return False
 
     today_iso = today.isoformat()
+
+    # habits that haven't reached their start date yet aren't due (US-23)
+    start_date = habit.get("start_date")
+    if start_date and start_date > today_iso:
+        return False
+    
     completed = {d for d in habit.get("completed_dates", []) if isinstance(d, str)}
     skipped = {d for d in habit.get("skipped_dates", []) if isinstance(d, str)}
 
@@ -285,6 +331,14 @@ def habit_dashboard():
 
     today_date = datetime.utcnow().date()
     today = today_date.isoformat()
+
+# show each habit's start date in All My Habits and flag ones that haven't started
+    for habit in habits:
+        start_date = habit.get("start_date")
+        habit["upcoming"] = bool(start_date) and start_date > today
+        if start_date:
+            habit["start_label"] = date.fromisoformat(start_date).strftime("%B %d, %Y")
+
     try:
         progress_period = int(request.args.get("period", 7))
     except ValueError:
@@ -640,6 +694,42 @@ def complete_habit(habit_id):
         }
     ), 200
 
+@app.route("/habits/<habit_id>/uncomplete", methods=["POST"])
+def uncomplete_habit(habit_id):
+    """Undo today's completion for the authenticated user's habit."""
+
+    if not session.get("user_id") or not session.get("user_email"):
+        return jsonify({"error": "Login required"}), 401
+
+    _validate_habit_form_token()
+
+    query, habit = _owned_habit(habit_id)
+    today_str = datetime.now(timezone.utc).date().isoformat()
+
+    if today_str not in habit.get("completed_dates", []):
+        return jsonify({"error": "Habit is not completed today"}), 409
+
+    result = get_db()["habits"].update_one(
+        {
+            **query,
+            "completed_dates": today_str,
+        },
+        {
+            "$pull": {"completed_dates": today_str},
+        },
+    )
+
+    if result.modified_count == 0:
+        return jsonify({"error": "Completion not removed"}), 409
+
+    return jsonify(
+        {
+            "habit_id": habit_id,
+            "completed": False,
+            "completed_date": today_str,
+            "message": "Habit completion undone",
+        }
+    ), 200
 
 def _parse_history_row(row):
     if row["completed_date"]:
@@ -800,6 +890,7 @@ def edit_habit(habit_id):
         return redirect(url_for("login"))
 
     query, habit = _owned_habit(habit_id)
+    today = datetime.utcnow().date()
     errors = []
     form = {
         "name": habit.get("name", ""),
@@ -809,6 +900,7 @@ def edit_habit(habit_id):
         "reminder_enabled": habit.get("reminder_enabled", False),
         "reminder_time": habit.get("reminder_time") or "",
         "reminder_timezone": habit.get("reminder_timezone") or "UTC",
+        "start_date": habit.get("start_date") or "",
     }
 
     if request.method == "POST":
@@ -817,6 +909,11 @@ def edit_habit(habit_id):
         form["reminder_enabled"] = request.form.get("reminder_enabled") == "on"
 
         errors, target = _validate_habit_form(form, max_name_length=100)
+        start_date, start_date_error = _parse_start_date(
+            form["start_date"], today, current=habit.get("start_date")
+        )
+        if start_date_error:
+            errors.append(start_date_error)
 
         if not errors:
             result = get_db()["habits"].update_one(
@@ -830,6 +927,7 @@ def edit_habit(habit_id):
                         "reminder_enabled": form["reminder_enabled"],
                         "reminder_time": form["reminder_time"] or None,
                         "reminder_timezone": form["reminder_timezone"] or "UTC",
+                        "start_date": start_date,
                     }
                 },
             )
@@ -845,6 +943,7 @@ def edit_habit(habit_id):
         frequency_choices=FREQUENCY_CHOICES,
         editing=True,
         habit_id=habit_id,
+        today=today.isoformat(),
         habit_csrf_token=_habit_form_token(),
     ), (400 if errors else 200)
 
@@ -991,6 +1090,40 @@ def resume_habit(habit_id):
     return redirect(url_for("habit_dashboard"))
 
 
+@app.route("/account/delete", methods=["GET", "POST"])
+@app.route("/account/delete-account", methods=["GET", "POST"])
+def delete_account():
+    """Delete the authenticated account and every record tied to it."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    user_email = session["user_email"]
+    user_id = session.get("user_id")
+    query = {"user_email": user_email}
+
+    if request.method == "POST":
+        _validate_habit_form_token()
+        db = get_db()
+        db["habits"].delete_many(query)
+        db["notifications"].delete_many(query)
+        db["push_subscriptions"].delete_many(query)
+
+        user_filter = {"email": user_email}
+        if user_id and ObjectId.is_valid(user_id):
+            user_filter = {"$or": [{"_id": ObjectId(user_id)}, {"email": user_email}]}
+        db["users"].delete_one(user_filter)
+
+        session.clear()
+        flash("Your account and all of your data have been deleted.", "success")
+        return redirect(url_for("home"))
+
+    return render_template(
+        "account/delete_account.html",
+        habit_count=get_db()["habits"].count_documents(query),
+        habit_csrf_token=_habit_form_token(),
+    )
+
+
 @app.route("/account/delete-data", methods=["GET", "POST"])
 def delete_account_data():
     """Wipe the user's habits (and the completion history stored on them) but keep the account."""
@@ -1011,6 +1144,43 @@ def delete_account_data():
         habit_csrf_token=_habit_form_token(),
     )
 
+@app.route("/habits/delete-selected", methods=["POST"])
+@login_required
+def delete_selected_habits():
+    """Delete only selected habits belonging to the signed-in user."""
+    _validate_habit_form_token()
+
+    submitted_ids = request.form.getlist("habit_ids")
+
+    if not submitted_ids:
+        flash("Select at least one habit to delete.", "error")
+        return redirect(url_for("habit_dashboard"))
+
+    if any(not ObjectId.is_valid(habit_id) for habit_id in submitted_ids):
+        abort(400, description="Invalid habit selection. Reload the Dashboard and try again.")
+
+    # Normalize and deduplicate IDs before constructing the deletion filter.
+    habit_ids = list({ObjectId(habit_id) for habit_id in submitted_ids})
+
+    result = get_db()["habits"].delete_many(
+        {
+            "_id": {"$in": habit_ids},
+            "user_email": session["user_email"],
+        }
+    )
+
+    deleted_count = result.deleted_count
+
+    if deleted_count:
+        label = "habit" if deleted_count == 1 else "habits"
+        flash(f"{deleted_count} {label} deleted successfully.", "success")
+    else:
+        flash(
+            "No habits were deleted. They may have already been removed.",
+            "error",
+        )
+
+    return redirect(url_for("habit_dashboard"))
 
 if __name__ == "__main__":
     app.run(debug=True)

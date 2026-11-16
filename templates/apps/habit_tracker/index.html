@@ -96,7 +96,21 @@
                     </select>
                 </div>
             </div>
-
+            <div>
+                <label for="habit-start-date"
+                       class="mb-2 block text-sm font-semibold text-slate-700">
+                    Start date
+                </label>
+                <input type="date"
+                       id="habit-start-date"
+                       name="start_date"
+                       value="{{ form.start_date }}"
+                       min="{{ today }}"
+                       class="w-full rounded-lg border border-slate-300 px-4 py-2.5">
+                <p class="mt-1 text-sm text-slate-500">
+                    The habit won't show up on Today's Habits until this date.
+                </p>
+            </div>
             <div>
                 <label for="habit-description"
                        class="mb-2 block text-sm font-semibold text-slate-700">

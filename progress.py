@@ -37,7 +37,7 @@ def _as_date(value):
 
 
 def _scheduled_dates(habit, start_date, end_date):
-    anchor = _as_date(habit.get("created_at")) or start_date
+    anchor = _as_date(habit.get("start_date")) or _as_date(habit.get("created_at")) or start_date
     first = max(start_date, anchor)
     frequency = habit.get("frequency")
     current = first
