@@ -46,8 +46,9 @@ def test_developer_clock_changes_dashboard_and_completion_date(
     )
 
     assert response.status_code == 302
-    assert b"Today: 2001-02-03" in authenticated_client.get("/dashboard").data
-    assert current_app_datetime() == datetime(2001, 2, 3, 4, 5, tzinfo=timezone.utc)
+    with authenticated_client:
+        assert b"Today: 2001-02-03" in authenticated_client.get("/dashboard").data
+        assert current_app_datetime() == datetime(2001, 2, 3, 4, 5, tzinfo=timezone.utc)
 
     response = authenticated_client.post(
         f"/habits/{result.inserted_id}/complete",
@@ -66,8 +67,10 @@ def test_developer_clock_accepts_date_only_sessions(client, app, monkeypatch):
     with client.session_transaction() as session:
         session[DEV_CLOCK_SESSION_KEY] = "2001-02-03"
 
-    now = datetime.now(timezone.utc)
-    simulated = current_app_datetime()
+    with client:
+        client.get("/settings")
+        now = datetime.now(timezone.utc)
+        simulated = current_app_datetime()
 
     assert simulated.date().isoformat() == "2001-02-03"
     assert simulated.hour == now.hour
