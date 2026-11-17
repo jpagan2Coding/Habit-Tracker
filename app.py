@@ -143,28 +143,36 @@ def dev_time_travel_enabled():
     return app.debug or app.config["DEV_TIME_TRAVEL_ENABLED"]
 
 
+def _utc_now():
+    return datetime.now(timezone.utc)
+
+
 def current_app_datetime():
-    """Return UTC now, using the session's simulated date when development mode allows it."""
-    now = datetime.now(timezone.utc)
+    """Return UTC now with the session's developer clock offset when enabled."""
+    now = _utc_now()
     if not dev_time_travel_enabled():
         return now
 
-    simulated_datetime = session.get(DEV_CLOCK_SESSION_KEY)
-    if not simulated_datetime:
+    clock_setting = session.get(DEV_CLOCK_SESSION_KEY)
+    if clock_setting is None:
         return now
     try:
-        if len(simulated_datetime) == 10:
-            simulated_date = date.fromisoformat(simulated_datetime)
+        if isinstance(clock_setting, (int, float)):
+            return now + timedelta(seconds=clock_setting)
+        if len(clock_setting) == 10:
+            simulated_date = date.fromisoformat(clock_setting)
             return now.replace(
                 year=simulated_date.year,
                 month=simulated_date.month,
                 day=simulated_date.day,
             )
-        simulated_datetime = datetime.fromisoformat(simulated_datetime)
+        simulated_datetime = datetime.fromisoformat(clock_setting)
         if simulated_datetime.tzinfo is None:
             simulated_datetime = simulated_datetime.replace(tzinfo=timezone.utc)
-        return simulated_datetime.astimezone(timezone.utc)
-    except (TypeError, ValueError):
+        simulated_datetime = simulated_datetime.astimezone(timezone.utc)
+        session[DEV_CLOCK_SESSION_KEY] = (simulated_datetime - now).total_seconds()
+        return simulated_datetime
+    except (OverflowError, TypeError, ValueError):
         app.logger.warning("Ignoring invalid simulated date and time in the session.")
         session.pop(DEV_CLOCK_SESSION_KEY, None)
         return now
@@ -751,7 +759,7 @@ def set_dev_clock():
             if selected_datetime.tzinfo is None:
                 selected_datetime = selected_datetime.replace(tzinfo=timezone.utc)
             selected_datetime = selected_datetime.astimezone(timezone.utc)
-            session[DEV_CLOCK_SESSION_KEY] = selected_datetime.isoformat(timespec="minutes")
+            session[DEV_CLOCK_SESSION_KEY] = (selected_datetime - _utc_now()).total_seconds()
             flash(
                 f"The app date and time are now "
                 f"{selected_datetime.strftime('%Y-%m-%d %H:%M UTC')}.",

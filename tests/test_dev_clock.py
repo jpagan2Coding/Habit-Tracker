@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
 
@@ -24,6 +24,8 @@ def test_developer_clock_changes_dashboard_and_completion_date(
     authenticated_client, app, monkeypatch, habits
 ):
     enable_dev_clock(app, monkeypatch)
+    actual_now = datetime(2026, 11, 17, 12, tzinfo=timezone.utc)
+    monkeypatch.setattr("app._utc_now", lambda: actual_now)
     result = habits.insert_one(
         {
             "name": "Test habit",
@@ -50,6 +52,11 @@ def test_developer_clock_changes_dashboard_and_completion_date(
         assert b"Today: 2001-02-03" in authenticated_client.get("/dashboard").data
         assert current_app_datetime() == datetime(2001, 2, 3, 4, 5, tzinfo=timezone.utc)
 
+    actual_now += timedelta(minutes=1)
+    with authenticated_client:
+        authenticated_client.get("/dashboard")
+        assert current_app_datetime() == datetime(2001, 2, 3, 4, 6, tzinfo=timezone.utc)
+
     response = authenticated_client.post(
         f"/habits/{result.inserted_id}/complete",
         data={"csrf_token": token},
@@ -59,6 +66,24 @@ def test_developer_clock_changes_dashboard_and_completion_date(
     assert response.json["completed_date"] == "2001-02-03"
     habit = habits.find_one({"_id": ObjectId(result.inserted_id)})
     assert habit["completed_dates"] == ["2001-02-03"]
+
+
+def test_developer_clock_resumes_from_previously_saved_datetime(client, app, monkeypatch):
+    enable_dev_clock(app, monkeypatch)
+    actual_now = datetime(2026, 11, 17, 12, tzinfo=timezone.utc)
+    monkeypatch.setattr("app._utc_now", lambda: actual_now)
+
+    with client.session_transaction() as session:
+        session[DEV_CLOCK_SESSION_KEY] = "2026-11-17T14:00+00:00"
+
+    with client:
+        client.get("/settings")
+        assert current_app_datetime() == datetime(2026, 11, 17, 14, tzinfo=timezone.utc)
+
+    actual_now += timedelta(minutes=1)
+    with client:
+        client.get("/settings")
+        assert current_app_datetime() == datetime(2026, 11, 17, 14, 1, tzinfo=timezone.utc)
 
 
 def test_developer_clock_accepts_date_only_sessions(client, app, monkeypatch):
