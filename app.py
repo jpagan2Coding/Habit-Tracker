@@ -149,21 +149,25 @@ def current_app_datetime():
     if not dev_time_travel_enabled():
         return now
 
-    simulated_date = session.get(DEV_CLOCK_SESSION_KEY)
-    if not simulated_date:
+    simulated_datetime = session.get(DEV_CLOCK_SESSION_KEY)
+    if not simulated_datetime:
         return now
     try:
-        simulated_date = date.fromisoformat(simulated_date)
+        if len(simulated_datetime) == 10:
+            simulated_date = date.fromisoformat(simulated_datetime)
+            return now.replace(
+                year=simulated_date.year,
+                month=simulated_date.month,
+                day=simulated_date.day,
+            )
+        simulated_datetime = datetime.fromisoformat(simulated_datetime)
+        if simulated_datetime.tzinfo is None:
+            simulated_datetime = simulated_datetime.replace(tzinfo=timezone.utc)
+        return simulated_datetime.astimezone(timezone.utc)
     except (TypeError, ValueError):
-        app.logger.warning("Ignoring invalid simulated date in the session.")
+        app.logger.warning("Ignoring invalid simulated date and time in the session.")
         session.pop(DEV_CLOCK_SESSION_KEY, None)
         return now
-
-    return now.replace(
-        year=simulated_date.year,
-        month=simulated_date.month,
-        day=simulated_date.day,
-    )
 
 
 def current_app_date():
@@ -723,7 +727,7 @@ def settings():
         page_id="settings",
         text_sizes=TEXT_SIZES,
         dev_time_travel_enabled=dev_time_travel_enabled(),
-        simulated_date=session.get(DEV_CLOCK_SESSION_KEY, current_app_date().isoformat()),
+        simulated_datetime=current_app_datetime().strftime("%Y-%m-%dT%H:%M"),
         habit_csrf_token=_habit_form_token(),
     )
 
@@ -738,14 +742,21 @@ def set_dev_clock():
         session.pop(DEV_CLOCK_SESSION_KEY, None)
         flash("The actual date and time are restored.", "success")
     else:
-        submitted_date = request.form.get("simulated_date", "").strip()
+        submitted_datetime = request.form.get("simulated_datetime", "").strip()
         try:
-            selected_date = date.fromisoformat(submitted_date)
+            selected_datetime = datetime.fromisoformat(submitted_datetime)
         except ValueError:
-            flash("Choose a valid date.", "error")
+            flash("Choose a valid date and time.", "error")
         else:
-            session[DEV_CLOCK_SESSION_KEY] = selected_date.isoformat()
-            flash(f"The app date is now {selected_date.isoformat()}.", "success")
+            if selected_datetime.tzinfo is None:
+                selected_datetime = selected_datetime.replace(tzinfo=timezone.utc)
+            selected_datetime = selected_datetime.astimezone(timezone.utc)
+            session[DEV_CLOCK_SESSION_KEY] = selected_datetime.isoformat(timespec="minutes")
+            flash(
+                f"The app date and time are now "
+                f"{selected_datetime.strftime('%Y-%m-%d %H:%M UTC')}.",
+                "success",
+            )
     return redirect(url_for("settings"))
 
 

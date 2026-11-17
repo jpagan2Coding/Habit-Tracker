@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from bson import ObjectId
 
-from app import DEV_CLOCK_SESSION_KEY
+from app import DEV_CLOCK_SESSION_KEY, current_app_datetime
 
 
 def enable_dev_clock(app, monkeypatch, enabled=True):
@@ -17,7 +17,7 @@ def test_settings_shows_developer_clock_only_when_enabled(client, app, monkeypat
 
     assert response.status_code == 200
     assert b"Developer clock" in response.data
-    assert b"simulated_date" in response.data
+    assert b"simulated_datetime" in response.data
 
 
 def test_developer_clock_changes_dashboard_and_completion_date(
@@ -39,14 +39,15 @@ def test_developer_clock_changes_dashboard_and_completion_date(
     with authenticated_client.session_transaction() as session:
         token = session["habit_form_token"]
 
-    simulated_date = "2001-02-03"
+    simulated_datetime = "2001-02-03T04:05"
     response = authenticated_client.post(
         "/settings/dev-clock",
-        data={"csrf_token": token, "simulated_date": simulated_date},
+        data={"csrf_token": token, "simulated_datetime": simulated_datetime},
     )
 
     assert response.status_code == 302
     assert b"Today: 2001-02-03" in authenticated_client.get("/dashboard").data
+    assert current_app_datetime() == datetime(2001, 2, 3, 4, 5, tzinfo=timezone.utc)
 
     response = authenticated_client.post(
         f"/habits/{result.inserted_id}/complete",
@@ -54,9 +55,39 @@ def test_developer_clock_changes_dashboard_and_completion_date(
     )
 
     assert response.status_code == 200
-    assert response.json["completed_date"] == simulated_date
+    assert response.json["completed_date"] == "2001-02-03"
     habit = habits.find_one({"_id": ObjectId(result.inserted_id)})
-    assert habit["completed_dates"] == [simulated_date]
+    assert habit["completed_dates"] == ["2001-02-03"]
+
+
+def test_developer_clock_accepts_date_only_sessions(client, app, monkeypatch):
+    enable_dev_clock(app, monkeypatch)
+    client.get("/settings")
+    with client.session_transaction() as session:
+        session[DEV_CLOCK_SESSION_KEY] = "2001-02-03"
+
+    now = datetime.now(timezone.utc)
+    simulated = current_app_datetime()
+
+    assert simulated.date().isoformat() == "2001-02-03"
+    assert simulated.hour == now.hour
+    assert simulated.minute == now.minute
+
+
+def test_developer_clock_rejects_invalid_datetime(client, app, monkeypatch):
+    enable_dev_clock(app, monkeypatch)
+    client.get("/settings")
+    with client.session_transaction() as session:
+        token = session["habit_form_token"]
+
+    response = client.post(
+        "/settings/dev-clock",
+        data={"csrf_token": token, "simulated_datetime": "not-a-date"},
+    )
+
+    assert response.status_code == 302
+    with client.session_transaction() as session:
+        assert DEV_CLOCK_SESSION_KEY not in session
 
 
 def test_developer_clock_reset_restores_actual_date(client, app, monkeypatch):
@@ -75,7 +106,8 @@ def test_developer_clock_reset_restores_actual_date(client, app, monkeypatch):
     with client.session_transaction() as session:
         assert DEV_CLOCK_SESSION_KEY not in session
     actual_date = datetime.now(timezone.utc).date().isoformat()
-    assert f'value="{actual_date}"' in client.get("/settings").get_data(as_text=True)
+    actual_datetime = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M")
+    assert f'value="{actual_datetime}"' in client.get("/settings").get_data(as_text=True)
 
 
 def test_developer_clock_is_unavailable_when_disabled(client, app, monkeypatch):
