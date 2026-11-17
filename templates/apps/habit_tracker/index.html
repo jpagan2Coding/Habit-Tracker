@@ -112,6 +112,21 @@
                 </p>
             </div>
             <div>
+                <label for="habit-when-missed"
+                       class="mb-2 block text-sm font-semibold text-slate-700">
+                    If I miss it
+                </label>
+                <select id="habit-when-missed"
+                        name="when_missed"
+                        class="w-full rounded-lg border border-slate-300 bg-white px-4 py-2.5">
+                    <option value="fail">It counts as missed</option>
+                    <option value="overdue"
+                            {% if form.when_missed == "overdue" %}selected{% endif %}>
+                        It stays overdue until I do it
+                    </option>
+                </select>
+            </div>
+            <div>
                 <label for="habit-description"
                        class="mb-2 block text-sm font-semibold text-slate-700">
                     Notes (optional)
