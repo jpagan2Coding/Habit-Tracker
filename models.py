@@ -11,3 +11,12 @@ HABIT_FILE_FIELDS = [
 ]
 
 FREQUENCY_CHOICES = ("daily", "weekly", "monthly")
+
+# Break lengths offered when pausing a habit (days -> label).
+PAUSE_DURATIONS = {
+    1: "1 day",
+    3: "3 days",
+    7: "1 week",
+    14: "2 weeks",
+    30: "30 days",
+}

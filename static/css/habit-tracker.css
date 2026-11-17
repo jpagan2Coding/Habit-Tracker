@@ -28,6 +28,17 @@
     outline-offset: 3px;
 }
 
+/* Habits on a break are greyed out; the status and action cells stay full strength. */
+.habit-paused {
+    background: #f8fafc;
+}
+
+/* Dim the cell contents, not the cell, so the row background stays even. */
+.habit-paused .habit-dim > * {
+    opacity: 0.5;
+    filter: grayscale(1);
+}
+
 .dashboard-shell {
     margin: -2rem -1rem;
     background: #f5f7fb;
