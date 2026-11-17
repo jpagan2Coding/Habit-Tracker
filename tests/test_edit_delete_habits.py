@@ -83,6 +83,69 @@ def test_edit_updates_existing_habit_without_duplicate(client, habits, owned_hab
 
 
 @pytest.mark.parametrize(
+    ("frequency", "schedule"),
+    [
+        ("weekly", {"reminder_weekdays": ["friday"], "reminder_month_day": None}),
+        ("monthly", {"reminder_weekdays": [], "reminder_month_day": 17}),
+    ],
+)
+def test_edit_without_schedule_fields_preserves_existing_schedule(
+    client, habits, owned_habit, frequency, schedule
+):
+    habits.update_one(
+        {"_id": owned_habit},
+        {
+            "$set": {
+                "frequency": frequency,
+                "reminder_enabled": True,
+                "reminder_time": "08:00",
+                "reminder_timezone": "UTC",
+                **schedule,
+            }
+        },
+    )
+    token = form_token(client, owned_habit)
+
+    response = client.post(
+        f"/habits/{owned_habit}/edit",
+        data={**UPDATED_FORM, "frequency": frequency, "csrf_token": token},
+    )
+
+    assert response.status_code == 302
+    updated = habits.find_one({"_id": owned_habit})
+    assert updated["reminder_weekdays"] == schedule["reminder_weekdays"]
+    assert updated["reminder_month_day"] == schedule["reminder_month_day"]
+
+
+def test_editing_frequency_ignores_schedule_for_previous_frequency(
+    client, habits, owned_habit
+):
+    habits.update_one(
+        {"_id": owned_habit},
+        {
+            "$set": {
+                "frequency": "weekly",
+                "reminder_enabled": True,
+                "reminder_time": "08:00",
+                "reminder_timezone": "UTC",
+                "reminder_weekdays": ["friday"],
+            }
+        },
+    )
+    token = form_token(client, owned_habit)
+
+    response = client.post(
+        f"/habits/{owned_habit}/edit",
+        data={**UPDATED_FORM, "frequency": "daily", "csrf_token": token},
+    )
+
+    assert response.status_code == 302
+    updated = habits.find_one({"_id": owned_habit})
+    assert updated["reminder_weekdays"] == []
+    assert updated["reminder_month_day"] is None
+
+
+@pytest.mark.parametrize(
     ("field", "value"),
     [
         ("name", "   "),
