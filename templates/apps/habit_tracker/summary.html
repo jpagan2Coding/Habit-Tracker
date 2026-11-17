@@ -19,6 +19,7 @@
 {% set status_labels = {
     'met': 'Completed',
     'skipped': 'Skipped',
+    'paused': 'On break',
     'missed': 'Missed',
     'in_progress': 'In progress',
 } %}
@@ -126,8 +127,8 @@
                 <h2 class="text-2xl font-bold text-slate-900">Your progress at a glance</h2>
                 <p class="mt-1 text-slate-500">
                     A streak counts the days, weeks, or months in a row where you hit a habit's target.
-                    Skipping doesn't break a streak, and the day, week, or month you're in now
-                    only counts once it's done.
+                    Skipping or taking a break doesn't break a streak, and the day, week, or month
+                    you're in now only counts once it's done.
                 </p>
 
                 <ul class="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-600" aria-label="History legend">
@@ -164,8 +165,13 @@
                     <div class="mt-5 rounded-lg border-2 border-dashed border-slate-200 px-4 py-6 text-center">
                         <p class="font-semibold text-slate-700">Not enough history yet</p>
                         <p class="mt-1 text-sm text-slate-500">
+                            {% if summary.starts_on %}
+                            This habit starts on {{ summary.starts_on.strftime('%B %d, %Y') }}. Its streaks
+                            and completion rate will show up here once it does.
+                            {% else %}
                             Complete this habit, or give it a full {{ summary.unit }}, and its streaks and
                             completion rate will show up here.
+                            {% endif %}
                         </p>
                     </div>
                     {% else %}

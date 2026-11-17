@@ -31,6 +31,7 @@ from models import FREQUENCY_CHOICES, HABIT_FILE_FIELDS, PAUSE_DURATIONS
 from progress import (
     VALID_PROGRESS_PERIODS,
     calculate_overall_progress,
+    current_break,
     habit_summary,
     period_start,
 )

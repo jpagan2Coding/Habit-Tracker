@@ -35,7 +35,15 @@ jobs:
         run: uv run pytest -v --ignore=tests/test_keyboard_shortcuts.py
 
       - name: Check if app starts
+        # Run in the foreground so the app is fully stopped before the step ends.
+        # A server left running holds uv's cache lock, and the "Post Install uv"
+        # cleanup then waits 5 minutes and fails. Exit code 124 means the app was
+        # still running when timeout stopped it; anything else means it crashed.
         run: |
-          timeout 5s uv run python app.py &
-          sleep 3
+          status=0
+          timeout 5s uv run python app.py || status=$?
+          if [ "$status" -ne 124 ]; then
+            echo "App exited early with status $status"
+            exit 1
+          fi
           echo "App started successfully"

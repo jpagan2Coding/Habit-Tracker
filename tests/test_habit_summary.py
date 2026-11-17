@@ -198,6 +198,102 @@ def test_invalid_period_is_rejected():
         summary_for(make_habit(), period_days=14)
 
 
+# start dates
+
+
+def test_habit_with_a_future_start_date_has_no_history_yet():
+    habit = make_habit(start_date="2026-11-10")
+
+    summary = summary_for(habit)
+
+    assert not summary["has_history"]
+    assert summary["starts_on"] == date(2026, 11, 10)
+    assert summary["periods"] == []
+    assert summary["percentage"] is None
+
+
+def test_days_before_the_start_date_are_not_missed():
+    # created Oct 1 but set to start Nov 2: Nov 2 and 3 are the only finished days
+    habit = make_habit(start_date="2026-11-02", completed_dates=days((11, 2), (11, 3)))
+
+    summary = summary_for(habit, period_days=30)
+
+    assert summary["starts_on"] is None
+    assert (summary["completed"], summary["expected"], summary["percentage"]) == (2, 2, 100)
+    assert summary["current_streak"] == 2
+
+
+# breaks
+
+
+def test_days_on_a_break_neither_break_nor_extend_a_streak():
+    habit = make_habit(
+        completed_dates=days((10, 28), (10, 29), (11, 3)),
+        breaks=[{"start": "2026-10-30", "end": "2026-11-02"}],
+    )
+
+    summary = summary_for(habit)
+
+    assert summary["current_streak"] == 3
+    # Oct 29 - Nov 4: one done, four on a break, one done, and today in progress
+    statuses = [period["status"] for period in summary["periods"]]
+    assert statuses == ["met"] + ["paused"] * 4 + ["met", "in_progress"]
+
+
+def test_days_on_a_break_do_not_lower_the_completion_rate():
+    habit = make_habit(
+        completed_dates=days((10, 29), (11, 3)),
+        breaks=[{"start": "2026-10-30", "end": "2026-11-02"}],
+    )
+
+    summary = summary_for(habit, period_days=7)
+
+    # Oct 29 - Nov 3 are finished, but Oct 30 - Nov 2 were on a break
+    assert (summary["completed"], summary["expected"], summary["percentage"]) == (2, 2, 100)
+
+
+def test_completion_during_a_break_still_counts():
+    habit = make_habit(
+        completed_dates=days((11, 1), (11, 2), (11, 3)),
+        breaks=[{"start": "2026-11-02", "end": "2026-11-02"}],
+    )
+
+    summary = summary_for(habit)
+
+    assert summary["current_streak"] == 3
+    assert summary["periods"][-2]["status"] == "met"
+
+
+def test_week_entirely_on_a_break_keeps_a_weekly_streak():
+    habit = make_habit(
+        frequency="weekly",
+        target=2,
+        # weeks of Oct 12 and Oct 26 hit the target; the week of Oct 19 was a break
+        completed_dates=days((10, 13), (10, 15), (10, 27), (10, 29)),
+        breaks=[{"start": "2026-10-19", "end": "2026-10-25"}],
+    )
+
+    summary = summary_for(habit)
+
+    assert summary["current_streak"] == 2
+
+
+def test_partial_break_lowers_a_weeks_target():
+    # 5 of 7 days on a break leaves ceil(2 * 2 / 7) = 1 completion needed
+    habit = make_habit(
+        frequency="weekly",
+        target=2,
+        completed_dates=days(
+            (10, 26),
+        ),
+        breaks=[{"start": "2026-10-27", "end": "2026-10-31"}],
+    )
+
+    periods = habit_periods(habit, TODAY)
+
+    assert (periods[-2]["target"], periods[-2]["status"]) == (1, "met")
+
+
 # not enough history
 
 
@@ -342,3 +438,39 @@ def test_summary_without_habits_points_to_creating_one(client, logged_in):
 
     assert "No habits yet" in html
     assert 'href="/habit-tracker"' in html
+
+
+def test_upcoming_habit_card_says_when_it_starts(client, habits, logged_in):
+    start = (datetime.utcnow().date() + timedelta(days=5)).isoformat()
+    habits.insert_one(make_habit("Later", created_at=datetime.utcnow(), start_date=start))
+
+    text = card_text(client.get("/summary").get_data(as_text=True), "Later")
+
+    assert "Not enough history yet" in text
+    assert "This habit starts on" in text
+    assert "Current streak" not in text
+
+
+def test_break_days_show_as_on_break_in_the_history_strip(client, habits, logged_in):
+    today = datetime.utcnow().date()
+    habits.insert_one(
+        make_habit(
+            "Rest",
+            created_at=datetime.utcnow() - timedelta(days=10),
+            completed_dates=utc_days_ago(1, 5, 6),
+            breaks=[
+                {
+                    "start": (today - timedelta(days=4)).isoformat(),
+                    "end": (today - timedelta(days=2)).isoformat(),
+                }
+            ],
+        )
+    )
+
+    html = client.get("/summary").get_data(as_text=True)
+    card = card_html(html, "Rest")
+
+    assert card.count("habit-history-paused") == 3
+    assert "Current streak 3 days" in card_text(html, "Rest")
+    assert "Completion 100%" in card_text(html, "Rest")
+    assert "3 on break" in re.sub(r"\s+", " ", card)

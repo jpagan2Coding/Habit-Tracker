@@ -109,6 +109,12 @@
     background: #cbd5e1;
 }
 
+/* Hatched so a break reads differently from a missed (solid gray) period. */
+.habit-history-paused {
+    background: repeating-linear-gradient(45deg, #94a3b8 0 2px, #f1f5f9 2px 5px);
+    border-color: #94a3b8;
+}
+
 .habit-history-in_progress {
     background: #ffffff;
     border: 1px dashed #64748b;
