@@ -132,6 +132,54 @@ load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key-change-in-production")
+app.config["DEV_TIME_TRAVEL_ENABLED"] = os.getenv(
+    "DEV_TIME_TRAVEL_ENABLED", ""
+).strip().lower() in {"1", "true", "yes", "on"}
+
+DEV_CLOCK_SESSION_KEY = "dev_clock_date"
+
+
+def dev_time_travel_enabled():
+    return app.debug or app.config["DEV_TIME_TRAVEL_ENABLED"]
+
+
+def _utc_now():
+    return datetime.now(timezone.utc)
+
+
+def current_app_datetime():
+    """Return UTC now with the session's developer clock offset when enabled."""
+    now = _utc_now()
+    if not dev_time_travel_enabled():
+        return now
+
+    clock_setting = session.get(DEV_CLOCK_SESSION_KEY)
+    if clock_setting is None:
+        return now
+    try:
+        if isinstance(clock_setting, (int, float)):
+            return now + timedelta(seconds=clock_setting)
+        if len(clock_setting) == 10:
+            simulated_date = date.fromisoformat(clock_setting)
+            return now.replace(
+                year=simulated_date.year,
+                month=simulated_date.month,
+                day=simulated_date.day,
+            )
+        simulated_datetime = datetime.fromisoformat(clock_setting)
+        if simulated_datetime.tzinfo is None:
+            simulated_datetime = simulated_datetime.replace(tzinfo=timezone.utc)
+        simulated_datetime = simulated_datetime.astimezone(timezone.utc)
+        session[DEV_CLOCK_SESSION_KEY] = (simulated_datetime - now).total_seconds()
+        return simulated_datetime
+    except (OverflowError, TypeError, ValueError):
+        app.logger.warning("Ignoring invalid simulated date and time in the session.")
+        session.pop(DEV_CLOCK_SESSION_KEY, None)
+        return now
+
+
+def current_app_date():
+    return current_app_datetime().date()
 
 
 def login_required(f):
@@ -428,7 +476,7 @@ def habit_dashboard():
         habit["id"] = str(habit["_id"])
         habit["reminder_description"] = format_reminder_schedule(habit)
 
-    today_date = datetime.utcnow().date()
+    today_date = current_app_date()
     today = today_date.isoformat()
     progress_period = _selected_progress_period()
 
@@ -686,7 +734,38 @@ def settings():
         "settings.html",
         page_id="settings",
         text_sizes=TEXT_SIZES,
+        dev_time_travel_enabled=dev_time_travel_enabled(),
+        simulated_datetime=current_app_datetime().strftime("%Y-%m-%dT%H:%M"),
+        habit_csrf_token=_habit_form_token(),
     )
+
+
+@app.route("/settings/dev-clock", methods=["POST"])
+def set_dev_clock():
+    if not dev_time_travel_enabled():
+        abort(404)
+
+    _validate_habit_form_token()
+    if request.form.get("reset"):
+        session.pop(DEV_CLOCK_SESSION_KEY, None)
+        flash("The actual date and time are restored.", "success")
+    else:
+        submitted_datetime = request.form.get("simulated_datetime", "").strip()
+        try:
+            selected_datetime = datetime.fromisoformat(submitted_datetime)
+        except ValueError:
+            flash("Choose a valid date and time.", "error")
+        else:
+            if selected_datetime.tzinfo is None:
+                selected_datetime = selected_datetime.replace(tzinfo=timezone.utc)
+            selected_datetime = selected_datetime.astimezone(timezone.utc)
+            session[DEV_CLOCK_SESSION_KEY] = (selected_datetime - _utc_now()).total_seconds()
+            flash(
+                f"The app date and time are now "
+                f"{selected_datetime.strftime('%Y-%m-%d %H:%M UTC')}.",
+                "success",
+            )
+    return redirect(url_for("settings"))
 
 
 @app.route("/logout", methods=["POST"])
@@ -804,7 +883,7 @@ def complete_habit(habit_id):
     _validate_habit_form_token()
 
     query, habit = _owned_habit(habit_id)
-    today = datetime.now(timezone.utc).date()
+    today = current_app_date()
     today_str = today.isoformat()
 
     if habit.get("status", "active") in INACTIVE_STATUSES:
@@ -854,7 +933,7 @@ def uncomplete_habit(habit_id):
     _validate_habit_form_token()
 
     query, habit = _owned_habit(habit_id)
-    today_str = datetime.now(timezone.utc).date().isoformat()
+    today_str = current_app_date().isoformat()
 
     if today_str not in habit.get("completed_dates", []):
         return jsonify({"error": "Habit is not completed today"}), 409
@@ -1152,7 +1231,7 @@ def skip_habit(habit_id):
     query, habit = _owned_habit(habit_id)
     _validate_habit_form_token()
 
-    today_date = datetime.utcnow().date()
+    today_date = current_app_date()
     today = today_date.isoformat()
     if today in habit.get("completed_dates", []):
         flash("This habit is already completed today, so it can't be skipped.", "error")
@@ -1176,7 +1255,7 @@ def unskip_habit(habit_id):
     query, _ = _owned_habit(habit_id)
     _validate_habit_form_token()
 
-    today = datetime.utcnow().date().isoformat()
+    today = current_app_date().isoformat()
     get_db()["habits"].update_one(query, {"$pull": {"skipped_dates": today}})
     return redirect(url_for("habit_dashboard"))
 
