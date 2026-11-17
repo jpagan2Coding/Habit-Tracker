@@ -2,9 +2,65 @@
     const checkbox = document.getElementById('reminder-enabled');
     const timezone = document.getElementById('reminder-timezone');
     const status = document.getElementById('notification-status');
+    const frequency = document.getElementById('habit-frequency');
+    const time = document.getElementById('reminder-time');
+    const preview = document.getElementById('reminder-preview');
+    const weeklyFields = document.getElementById('weekly-reminder-fields');
+    const monthlyFields = document.getElementById('monthly-reminder-fields');
 
     if (!checkbox || !timezone || !status) return;
-    timezone.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    if (!timezone.value) {
+        timezone.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    }
+
+    function updateScheduleFields() {
+        const selectedFrequency = frequency ? frequency.value : '';
+        if (weeklyFields) weeklyFields.hidden = selectedFrequency !== 'weekly';
+        if (monthlyFields) monthlyFields.hidden = selectedFrequency !== 'monthly';
+        updatePreview();
+    }
+
+    function updatePreview() {
+        if (!preview || !frequency || !time) return;
+        const selectedFrequency = frequency.value;
+        const formattedTime = time.value
+            ? new Date(`1970-01-01T${time.value}:00`).toLocaleTimeString([], {
+                hour: 'numeric', minute: '2-digit'
+            })
+            : 'the selected time';
+        if (selectedFrequency === 'daily') {
+            preview.textContent = `Remind me every day at ${formattedTime}.`;
+        } else if (selectedFrequency === 'weekly') {
+            const days = [...document.querySelectorAll('.reminder-weekday:checked')]
+                .map((input) => input.value.charAt(0).toUpperCase() + input.value.slice(1));
+            preview.textContent = days.length
+                ? `Remind me on ${days.join(' and ')} at ${formattedTime}.`
+                : 'Choose one or more weekdays for your reminder.';
+        } else if (selectedFrequency === 'monthly') {
+            const monthDay = document.getElementById('reminder-month-day');
+            const label = monthDay && monthDay.value
+                ? (monthDay.value === 'last' ? 'the last day of the month' : `the ${monthDay.value}${ordinal(monthDay.value)} of each month`)
+                : 'the selected date';
+            preview.textContent = `Remind me on ${label} at ${formattedTime}.`;
+        } else {
+            preview.textContent = '';
+        }
+    }
+
+    function ordinal(value) {
+        const number = Number(value);
+        if (number % 100 >= 11 && number % 100 <= 13) return 'th';
+        return ({ 1: 'st', 2: 'nd', 3: 'rd' })[number % 10] || 'th';
+    }
+
+    if (frequency) frequency.addEventListener('change', updateScheduleFields);
+    if (time) time.addEventListener('input', updatePreview);
+    document.querySelectorAll('.reminder-weekday').forEach((input) => {
+        input.addEventListener('change', updatePreview);
+    });
+    const monthDay = document.getElementById('reminder-month-day');
+    if (monthDay) monthDay.addEventListener('change', updatePreview);
+    updateScheduleFields();
 
     async function enableReminders() {
         if (!checkbox.checked) {

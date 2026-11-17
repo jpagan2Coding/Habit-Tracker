@@ -15,6 +15,18 @@
             dropdown.classList.add('hidden');
             bell.setAttribute('aria-expanded', 'false');
         }
+        document.querySelectorAll('.reminder-schedule[open]').forEach(function (details) {
+            if (!details.contains(event.target)) details.open = false;
+        });
+    });
+
+    document.querySelectorAll('.reminder-schedule').forEach(function (details) {
+        details.addEventListener('toggle', function () {
+            if (!details.open) return;
+            document.querySelectorAll('.reminder-schedule').forEach(function (other) {
+                if (other !== details) other.open = false;
+            });
+        });
     });
 
     async function markRead(item) {
@@ -25,11 +37,22 @@
         );
         if (!response.ok) throw new Error('Unable to update notification.');
         item.classList.remove('bg-indigo-50');
-        const link = item.querySelector('[data-notification-link]');
-        if (link) link.classList.remove('font-semibold');
+        clearHabitReminder(item.dataset.habitId);
+        const content = item.querySelector('.block.text-left');
+        if (content) content.classList.remove('font-semibold');
         const button = item.querySelector('[data-mark-notification-read]');
         if (button) button.remove();
         updateUnreadCount(-1);
+    }
+
+    function clearHabitReminder(habitId) {
+        if (!habitId) return;
+        const habit = document.querySelector(`[data-habit-id="${habitId}"].reminder-highlight`);
+        if (!habit) return;
+        habit.classList.remove('reminder-highlight', 'border-amber-400', 'bg-amber-50', 'ring-2', 'ring-amber-200');
+        habit.classList.add('border-slate-200', 'bg-white');
+        const badge = habit.querySelector('.reminder-due-badge');
+        if (badge) badge.remove();
     }
 
     function updateUnreadCount(change) {
@@ -50,20 +73,6 @@
         });
     });
 
-    document.querySelectorAll('[data-notification-link]').forEach(function (link) {
-        link.addEventListener('click', async function (event) {
-            const item = link.closest('[data-notification-id]');
-            if (!item.querySelector('[data-mark-notification-read]')) return;
-            event.preventDefault();
-            try {
-                await markRead(item);
-            } catch (error) {
-                console.error(error);
-            }
-            window.location.href = link.href;
-        });
-    });
-
     const markAll = document.getElementById('mark-all-notifications');
     if (markAll) {
         markAll.addEventListener('click', async function () {
@@ -76,8 +85,9 @@
                 document.querySelectorAll('[data-mark-notification-read]').forEach(function (button) {
                     const item = button.closest('[data-notification-id]');
                     item.classList.remove('bg-indigo-50');
-                    const link = item.querySelector('[data-notification-link]');
-                    if (link) link.classList.remove('font-semibold');
+                    clearHabitReminder(item.dataset.habitId);
+                    const content = item.querySelector('.block.text-left');
+                    if (content) content.classList.remove('font-semibold');
                     button.remove();
                 });
                 countBadge.textContent = '0';
