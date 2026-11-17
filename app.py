@@ -35,6 +35,7 @@ from progress import (
     habit_summary,
     period_start,
 )
+from reminders import format_reminder_schedule, validate_reminder_settings
 
 
 def _is_valid_timezone(name):
@@ -47,7 +48,9 @@ def _is_valid_timezone(name):
     return True
 
 
-def _validate_habit_form(form, *, target_required=False, max_name_length=None):
+def _validate_habit_form(
+    form, *, target_required=False, max_name_length=None, allow_legacy_schedule=False
+):
     errors = []
 
     if not form["name"]:
@@ -74,13 +77,18 @@ def _validate_habit_form(form, *, target_required=False, max_name_length=None):
 
     if form["frequency"] not in FREQUENCY_CHOICES:
         errors.append("Choose a frequency.")
-    if form["reminder_enabled"]:
-        try:
-            datetime.strptime(form["reminder_time"], "%H:%M")
-        except ValueError:
-            errors.append("Enter a valid reminder time.")
-        if not _is_valid_timezone(form["reminder_timezone"]):
-            errors.append("Choose a valid time zone.")
+    reminder_errors, weekdays, month_day = validate_reminder_settings(
+        form["frequency"],
+        form["reminder_enabled"],
+        form["reminder_time"],
+        form["reminder_timezone"],
+        form.get("reminder_weekdays"),
+        form.get("reminder_month_day"),
+        allow_legacy_schedule=allow_legacy_schedule,
+    )
+    errors.extend(reminder_errors)
+    form["reminder_weekdays"] = weekdays
+    form["reminder_month_day"] = month_day
 
     return errors, target
 
@@ -219,6 +227,8 @@ def habit_tracker():
         "reminder_time": "",
         "reminder_timezone": "UTC",
         "start_date": today.isoformat(),
+        "reminder_weekdays": [],
+        "reminder_month_day": "",
     }
     errors = []
 
@@ -233,10 +243,19 @@ def habit_tracker():
                 "reminder_time": request.form.get("reminder_time", "").strip(),
                 "reminder_timezone": request.form.get("reminder_timezone", "UTC").strip(),
                 "start_date": request.form.get("start_date", "").strip(),
-            }
+               "reminder_weekdays": request.form.getlist("reminder_weekdays"),
+               "reminder_month_day": request.form.get("reminder_month_day", "").strip(),
+           }
         )
 
-        errors, target = _validate_habit_form(form, target_required=True)
+        errors, target = _validate_habit_form(
+           form,
+           target_required=True,
+           allow_legacy_schedule=(
+               "reminder_weekdays" not in request.form
+               and "reminder_month_day" not in request.form
+           ),
+        )
         start_date, start_date_error = _parse_start_date(form["start_date"], today)
         if start_date_error:
             errors.append(start_date_error)
@@ -256,6 +275,8 @@ def habit_tracker():
                     "reminder_timezone": form["reminder_timezone"] or "UTC",
                     # a blank start date means the habit starts today
                     "start_date": start_date or today.isoformat(),
+                    "reminder_weekdays": form["reminder_weekdays"],
+                    "reminder_month_day": form["reminder_month_day"],
                 }
             )
             return redirect(url_for("habit_dashboard"))
@@ -319,6 +340,7 @@ def habit_dashboard():
     )
     for habit in habits:
         habit["id"] = str(habit["_id"])
+        habit["reminder_description"] = format_reminder_schedule(habit)
 
     today_date = datetime.utcnow().date()
     today = today_date.isoformat()
@@ -373,6 +395,22 @@ def habit_dashboard():
         unread_notification_count = notifications_collection.count_documents(
             {"user_email": session["user_email"], "read_at": {"$exists": False}}
         )
+    reminded_habit_ids = {
+        str(notification["habit_id"])
+        for notification in notifications
+        if (
+            not notification.get("read_at")
+            and notification.get("habit_id")
+            and not any(
+                habit["id"] == str(notification["habit_id"])
+                and (
+                    today in habit.get("completed_dates", [])
+                    or today in habit.get("skipped_dates", [])
+                )
+                for habit in habits
+            )
+        )
+    }
 
     return render_template(
         "apps/habit_tracker/dashboard.html",
@@ -397,6 +435,7 @@ def habit_dashboard():
         habit_csrf_token=_habit_form_token(),
         notifications=notifications,
         unread_notification_count=unread_notification_count,
+        reminded_habit_ids=reminded_habit_ids,
     )
 
 
@@ -917,14 +956,28 @@ def edit_habit(habit_id):
         "reminder_time": habit.get("reminder_time") or "",
         "reminder_timezone": habit.get("reminder_timezone") or "UTC",
         "start_date": habit.get("start_date") or "",
+        "reminder_weekdays": habit.get("reminder_weekdays") or [],
+        "reminder_month_day": habit.get("reminder_month_day") or "",
     }
 
     if request.method == "POST":
         _validate_habit_form_token()
-        form = {key: request.form.get(key, "").strip() for key in form}
+        form = {
+            key: request.form.get(key, "").strip()
+            for key in form
+            if key not in ("reminder_weekdays",)
+        }
+        form["reminder_weekdays"] = request.form.getlist("reminder_weekdays")
         form["reminder_enabled"] = request.form.get("reminder_enabled") == "on"
 
-        errors, target = _validate_habit_form(form, max_name_length=100)
+        errors, target = _validate_habit_form(
+            form,
+            max_name_length=100,
+            allow_legacy_schedule=(
+                "reminder_weekdays" not in request.form
+                and "reminder_month_day" not in request.form
+            ),
+        )
         start_date, start_date_error = _parse_start_date(
             form["start_date"], today, current=habit.get("start_date")
         )
@@ -944,6 +997,8 @@ def edit_habit(habit_id):
                         "reminder_time": form["reminder_time"] or None,
                         "reminder_timezone": form["reminder_timezone"] or "UTC",
                         "start_date": start_date,
+                        "reminder_weekdays": form["reminder_weekdays"],
+                        "reminder_month_day": form["reminder_month_day"],
                     }
                 },
             )
