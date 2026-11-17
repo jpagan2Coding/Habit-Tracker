@@ -27,7 +27,7 @@ from pymongo.errors import DuplicateKeyError, PyMongoError
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from models import FREQUENCY_CHOICES, HABIT_FILE_FIELDS, PAUSE_DURATIONS
+from models import FREQUENCY_CHOICES, HABIT_FILE_FIELDS, PAUSE_DURATIONS, WHEN_MISSED_CHOICES
 from progress import (
     VALID_PROGRESS_PERIODS,
     calculate_overall_progress,
@@ -112,6 +112,20 @@ def _parse_start_date(value, today, current=None):
         return current, "Start date cannot be in the past."
 
     return start.isoformat(), None
+
+def _parse_when_missed(value):
+    """Check the "If I miss it" choice from the habit form (US-24).
+
+    Returns (when_missed, error). A blank choice means "fail", which is how
+    habits worked before this setting existed.
+    """
+    if not value:
+        return "fail", None
+
+    if value not in WHEN_MISSED_CHOICES:
+        return "fail", "Choose what happens when this habit is missed."
+
+    return value, None
 
 
 load_dotenv(Path(__file__).resolve().with_name("atlas-credentials.env"))
@@ -227,6 +241,7 @@ def habit_tracker():
         "reminder_time": "",
         "reminder_timezone": "UTC",
         "start_date": today.isoformat(),
+        "when_missed": "fail",
         "reminder_weekdays": [],
         "reminder_month_day": "",
     }
@@ -243,6 +258,7 @@ def habit_tracker():
                 "reminder_time": request.form.get("reminder_time", "").strip(),
                 "reminder_timezone": request.form.get("reminder_timezone", "UTC").strip(),
                 "start_date": request.form.get("start_date", "").strip(),
+                "when_missed": request.form.get("when_missed", "").strip(),
                "reminder_weekdays": request.form.getlist("reminder_weekdays"),
                "reminder_month_day": request.form.get("reminder_month_day", "").strip(),
            }
@@ -260,6 +276,10 @@ def habit_tracker():
         if start_date_error:
             errors.append(start_date_error)
 
+        when_missed, when_missed_error = _parse_when_missed(form["when_missed"])
+        if when_missed_error:
+            errors.append(when_missed_error)
+
         if not errors:
             get_db()["habits"].insert_one(
                 {
@@ -275,6 +295,7 @@ def habit_tracker():
                     "reminder_timezone": form["reminder_timezone"] or "UTC",
                     # a blank start date means the habit starts today
                     "start_date": start_date or today.isoformat(),
+                    "when_missed": when_missed,
                     "reminder_weekdays": form["reminder_weekdays"],
                     "reminder_month_day": form["reminder_month_day"],
                 }
@@ -323,6 +344,71 @@ def is_due_today(habit, today):
     completed_this_period = sum(1 for d in completed if start_iso <= d <= today_iso)
     return completed_this_period < (habit.get("target") or 1)
 
+def _previous_period(frequency, today):
+    """Return the first and last day of the period before the current one"""
+    current_start = period_start(frequency, today)
+    previous_end = current_start - timedelta(days=1)
+    previous_start = period_start(frequency, previous_end)
+    return previous_start, previous_end
+
+
+def _habit_start(habit):
+    """The day a habit started: its start date, or the day it was created"""
+    start_date = habit.get("start_date")
+    if start_date:
+        return date.fromisoformat(start_date)
+
+    created_at = habit.get("created_at")
+    if isinstance(created_at, datetime):
+        return created_at.date()
+
+    return None
+
+
+def is_overdue(habit, today):
+    """Check if a habit set to "overdue" was missed last period and still isn't done"""
+    if habit.get("when_missed") != "overdue":
+        return False
+
+    # on a break, paused, archived, expired, or not started yet
+    if not is_due_today(habit, today):
+        return False
+
+    frequency = habit.get("frequency") or "daily"
+    today_iso = today.isoformat()
+    completed = {d for d in habit.get("completed_dates", []) if isinstance(d, str)}
+    skipped = {d for d in habit.get("skipped_dates", []) if isinstance(d, str)}
+
+    # completing it this period (or skipping it today) clears the overdue mark
+    current_start_iso = period_start(frequency, today).isoformat()
+    if any(current_start_iso <= d <= today_iso for d in completed):
+        return False
+    if today_iso in skipped:
+        return False
+
+    previous_start, previous_end = _previous_period(frequency, today)
+
+    # a habit can't be overdue for a period from before it started
+    habit_start = _habit_start(habit)
+    if habit_start and habit_start > previous_start:
+        return False
+
+    # count last period's check-ins, plus the days that were skipped or on a break, since those count as excused instead of missed
+    done_last_period = 0
+    excused_last_period = 0
+    day = previous_start
+    while day <= previous_end:
+        day_iso = day.isoformat()
+        if day_iso in completed:
+            done_last_period += 1
+        elif day_iso in skipped or current_break(habit, day):
+            excused_last_period += 1
+        day += timedelta(days=1)
+
+    # a daily habit can only be checked in once a day, so one is enough
+    needed = 1 if frequency == "daily" else (habit.get("target") or 1)
+    return done_last_period + excused_last_period < needed
+
 
 def _resume_date(habit, today):
     """First day a habit on a break is active again, or None when it isn't on a break."""
@@ -365,6 +451,11 @@ def habit_dashboard():
     )
 
     todays_habits = [habit for habit in habits if is_due_today(habit, today_date)]
+
+    # habits missed last time that carry over get an Overdue badge and go first
+    for habit in todays_habits:
+        habit["overdue"] = is_overdue(habit, today_date)
+    todays_habits.sort(key=lambda habit: not habit["overdue"])
 
     completion_by_id = {habit["id"]: today in habit.get("completed_dates", []) for habit in habits}
 
@@ -956,6 +1047,7 @@ def edit_habit(habit_id):
         "reminder_time": habit.get("reminder_time") or "",
         "reminder_timezone": habit.get("reminder_timezone") or "UTC",
         "start_date": habit.get("start_date") or "",
+        "when_missed": habit.get("when_missed") or "fail",
         "reminder_weekdays": habit.get("reminder_weekdays") or [],
         "reminder_month_day": habit.get("reminder_month_day") or "",
     }
@@ -984,6 +1076,10 @@ def edit_habit(habit_id):
         if start_date_error:
             errors.append(start_date_error)
 
+        when_missed, when_missed_error = _parse_when_missed(form["when_missed"])
+        if when_missed_error:
+            errors.append(when_missed_error)
+
         if not errors:
             result = get_db()["habits"].update_one(
                 query,
@@ -997,6 +1093,7 @@ def edit_habit(habit_id):
                         "reminder_time": form["reminder_time"] or None,
                         "reminder_timezone": form["reminder_timezone"] or "UTC",
                         "start_date": start_date,
+                        "when_missed": when_missed,
                         "reminder_weekdays": form["reminder_weekdays"],
                         "reminder_month_day": form["reminder_month_day"],
                     }
