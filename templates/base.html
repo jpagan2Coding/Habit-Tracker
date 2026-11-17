@@ -26,6 +26,9 @@
                             Habits
                         </span>
                     </a>
+                    <a href="{{ url_for('summary') }}" class="px-4 py-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 transition-all duration-200">
+                        Summary
+                    </a>
                     <a href="{{ url_for('settings') }}" class="px-4 py-2 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 transition-all duration-200">
                         Settings
                     </a>
@@ -50,6 +53,7 @@
         <div id="mobileMenu" class="hidden md:hidden bg-white border-t border-gray-100">
             <div class="px-2 pt-2 pb-3 space-y-1">
                 <a href="/habit-tracker" class="block px-3 py-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50">Habit Tracker</a>
+                <a href="{{ url_for('summary') }}" class="block px-3 py-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50">Summary</a>
                 <a href="{{ url_for('settings') }}" class="block px-3 py-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50">Settings</a>
                 {% if not session.get('user_id') %}
                 <a href="{{ url_for('register') }}" class="block px-3 py-2 rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-50">Register</a>

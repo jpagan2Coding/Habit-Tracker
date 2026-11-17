@@ -32,6 +32,8 @@ from progress import (
     VALID_PROGRESS_PERIODS,
     calculate_overall_progress,
     current_break,
+    habit_summary,
+    period_start,
 )
 
 
@@ -137,9 +139,7 @@ def _mongo_client_options(mongo_uri):
 
 @lru_cache(maxsize=1)
 def _get_mongo_client(mongo_uri):
-    return MongoClient(
-        mongo_uri, **_mongo_client_options(mongo_uri)
-    )
+    return MongoClient(mongo_uri, **_mongo_client_options(mongo_uri))
 
 
 def get_db():
@@ -274,15 +274,6 @@ def habit_tracker():
 INACTIVE_STATUSES = ("paused", "archived", "expired")
 
 
-def _period_start(frequency, today):
-    # start of the current day / week (Monday) / month
-    if frequency == "weekly":
-        return today - timedelta(days=today.weekday())
-    if frequency == "monthly":
-        return today.replace(day=1)
-    return today
-
-
 def is_due_today(habit, today):
     """Check if a habit should show up on today's list."""
     if habit.get("status", "active") in INACTIVE_STATUSES:
@@ -307,7 +298,7 @@ def is_due_today(habit, today):
         return True
 
     # due until the target is hit for this period (skipped days don't count toward it)
-    start_iso = _period_start(habit.get("frequency") or "daily", today).isoformat()
+    start_iso = period_start(habit.get("frequency") or "daily", today).isoformat()
     completed_this_period = sum(1 for d in completed if start_iso <= d <= today_iso)
     return completed_this_period < (habit.get("target") or 1)
 
@@ -331,6 +322,7 @@ def habit_dashboard():
 
     today_date = datetime.utcnow().date()
     today = today_date.isoformat()
+    progress_period = _selected_progress_period()
 
 # show each habit's start date in All My Habits and flag ones that haven't started
     for habit in habits:
@@ -405,6 +397,34 @@ def habit_dashboard():
         habit_csrf_token=_habit_form_token(),
         notifications=notifications,
         unread_notification_count=unread_notification_count,
+    )
+
+
+def _selected_progress_period():
+    """The ?period= day count chosen on the page, falling back to the last 7 days."""
+    try:
+        period = int(request.args.get("period", 7))
+    except ValueError:
+        return 7
+    return period if period in VALID_PROGRESS_PERIODS else 7
+
+
+@app.route("/summary")
+@login_required
+def summary():
+    """Per-habit streaks and completion rate over the selected period."""
+    habits = list(
+        get_db()["habits"].find({"user_email": session.get("user_email")}).sort("created_at", -1)
+    )
+    today = datetime.utcnow().date()
+    period_days = _selected_progress_period()
+
+    return render_template(
+        "apps/habit_tracker/summary.html",
+        page_id="summary",
+        habit_summaries=[(habit, habit_summary(habit, today, period_days)) for habit in habits],
+        period_days=period_days,
+        progress_periods=VALID_PROGRESS_PERIODS,
     )
 
 
@@ -576,8 +596,7 @@ def push_status():
     if not session.get("user_id") or not session.get("user_email"):
         return {"error": "Login required."}, 401
     configured = all(
-        os.getenv(name)
-        for name in ("VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT")
+        os.getenv(name) for name in ("VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_SUBJECT")
     )
     subscription = get_db()["push_subscriptions"].find_one(
         {"user_email": session["user_email"]},
@@ -694,6 +713,7 @@ def complete_habit(habit_id):
         }
     ), 200
 
+
 @app.route("/habits/<habit_id>/uncomplete", methods=["POST"])
 def uncomplete_habit(habit_id):
     """Undo today's completion for the authenticated user's habit."""
@@ -808,12 +828,8 @@ def _format_export_datetime(value):
 
 
 def _serialize_habit_history(habit):
-    history = [
-        (history_date, "completed") for history_date in habit.get("completed_dates") or []
-    ]
-    history.extend(
-        (history_date, "skipped") for history_date in habit.get("skipped_dates") or []
-    )
+    history = [(history_date, "completed") for history_date in habit.get("completed_dates") or []]
+    history.extend((history_date, "skipped") for history_date in habit.get("skipped_dates") or [])
     serialized = []
     for history_date, status in history:
         if isinstance(history_date, datetime):
@@ -1144,6 +1160,7 @@ def delete_account_data():
         habit_csrf_token=_habit_form_token(),
     )
 
+
 @app.route("/habits/delete-selected", methods=["POST"])
 @login_required
 def delete_selected_habits():
@@ -1181,6 +1198,7 @@ def delete_selected_habits():
         )
 
     return redirect(url_for("habit_dashboard"))
+
 
 if __name__ == "__main__":
     app.run(debug=True)

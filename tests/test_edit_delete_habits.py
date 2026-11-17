@@ -219,9 +219,7 @@ def test_invalid_habit_id_returns_404(client, owned_habit, action):
     assert response.status_code == 404
 
 
-def test_bulk_delete_removes_only_selected_owned_habits(
-    client, habits, owned_habit
-):
+def test_bulk_delete_removes_only_selected_owned_habits(client, habits, owned_habit):
     token = form_token(client, owned_habit)
     original = habits.find_one({"_id": owned_habit})
 
@@ -256,9 +254,7 @@ def test_bulk_delete_removes_only_selected_owned_habits(
         ) in session.get("_flashes", [])
 
 
-def test_bulk_delete_preserves_other_users_habits(
-    client, habits, owned_habit
-):
+def test_bulk_delete_preserves_other_users_habits(client, habits, owned_habit):
     token = form_token(client, owned_habit)
 
     other = dict(habits.find_one({"_id": owned_habit}))
@@ -280,9 +276,7 @@ def test_bulk_delete_preserves_other_users_habits(
 
 
 @pytest.mark.parametrize("token", [None, "incorrect-token"])
-def test_bulk_delete_requires_valid_csrf(
-    client, habits, owned_habit, token
-):
+def test_bulk_delete_requires_valid_csrf(client, habits, owned_habit, token):
     form_token(client, owned_habit)
     original = habits.find_one({"_id": owned_habit})
     data = {"habit_ids": [str(owned_habit)]}
@@ -312,9 +306,7 @@ def test_bulk_delete_requires_login(client, habits, owned_habit):
     assert habits.find_one({"_id": owned_habit}) == original
 
 
-def test_bulk_delete_empty_selection_preserves_habits(
-    client, habits, owned_habit
-):
+def test_bulk_delete_empty_selection_preserves_habits(client, habits, owned_habit):
     token = form_token(client, owned_habit)
     original = habits.find_one({"_id": owned_habit})
 
@@ -327,9 +319,7 @@ def test_bulk_delete_empty_selection_preserves_habits(
     assert habits.find_one({"_id": owned_habit}) == original
 
 
-def test_bulk_delete_invalid_id_prevents_all_deletion(
-    client, habits, owned_habit
-):
+def test_bulk_delete_invalid_id_prevents_all_deletion(client, habits, owned_habit):
     token = form_token(client, owned_habit)
     original = habits.find_one({"_id": owned_habit})
 
@@ -345,9 +335,7 @@ def test_bulk_delete_invalid_id_prevents_all_deletion(
     assert habits.find_one({"_id": owned_habit}) == original
 
 
-def test_bulk_delete_duplicate_ids_count_once(
-    client, habits, owned_habit
-):
+def test_bulk_delete_duplicate_ids_count_once(client, habits, owned_habit):
     token = form_token(client, owned_habit)
 
     response = client.post(

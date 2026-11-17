@@ -71,6 +71,7 @@ def test_tampered_cookie_is_ignored(client):
     assert b"text-size-default" in response.data
     assert b"<script>alert(1)</script>" not in response.data
 
+
 def test_text_size_class_only_appears_on_html_tag(authenticated_client):
     html = authenticated_client.get("/dashboard").get_data(as_text=True)
     assert html.count("text-size-") == 1

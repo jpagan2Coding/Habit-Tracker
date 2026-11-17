@@ -107,9 +107,7 @@ def test_notification_read_endpoints_are_user_scoped(client, mongo_client):
 
 
 @pytest.mark.parametrize("notification_id", ["not-an-object-id", str(ObjectId())])
-def test_notification_read_returns_not_found_for_invalid_or_missing_id(
-    client, notification_id
-):
+def test_notification_read_returns_not_found_for_invalid_or_missing_id(client, notification_id):
     _login(client)
     client.get("/dashboard")
     with client.session_transaction() as session:
