@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from progress import is_scheduled_on
+from progress import current_break, is_scheduled_on
 
 
 def _vapid_private_key(value):
@@ -41,6 +41,11 @@ def reminder_due(habit, now_utc=None):
 
     occurrence_date = local_now.date()
     if not is_scheduled_on(habit, occurrence_date):
+        return None
+    # Breaks use UTC dates like the dashboard; checking the local date too keeps the
+    # whole break quiet in the user's own time zone.
+    utc_date = now_utc.astimezone(timezone.utc).date()
+    if current_break(habit, occurrence_date) or current_break(habit, utc_date):
         return None
     return f"{occurrence_date.isoformat()}:{habit.get('reminder_time')}"
 
