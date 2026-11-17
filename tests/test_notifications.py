@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 from bson import ObjectId
@@ -119,3 +120,12 @@ def test_notification_read_returns_not_found_for_invalid_or_missing_id(client, n
     )
 
     assert response.status_code == 404
+
+
+def test_push_notification_does_not_navigate_when_clicked():
+    service_worker = (
+        Path(__file__).resolve().parents[1] / "static" / "push-service-worker.js"
+    ).read_text(encoding="utf-8")
+
+    assert "notificationclick" not in service_worker
+    assert "clients.openWindow" not in service_worker

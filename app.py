@@ -327,7 +327,7 @@ def is_due_today(habit, today):
     start_date = habit.get("start_date")
     if start_date and start_date > today_iso:
         return False
-    
+
     completed = {d for d in habit.get("completed_dates", []) if isinstance(d, str)}
     skipped = {d for d in habit.get("skipped_dates", []) if isinstance(d, str)}
 
@@ -1061,6 +1061,11 @@ def edit_habit(habit_id):
         }
         form["reminder_weekdays"] = request.form.getlist("reminder_weekdays")
         form["reminder_enabled"] = request.form.get("reminder_enabled") == "on"
+        if form["frequency"] == habit.get("frequency"):
+            if "reminder_weekdays" not in request.form:
+                form["reminder_weekdays"] = list(habit.get("reminder_weekdays") or [])
+            if "reminder_month_day" not in request.form:
+                form["reminder_month_day"] = habit.get("reminder_month_day") or ""
 
         errors, target = _validate_habit_form(
             form,
