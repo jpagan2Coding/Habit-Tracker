@@ -30,8 +30,11 @@ from werkzeug.utils import secure_filename
 from models import FREQUENCY_CHOICES, HABIT_FILE_FIELDS, PAUSE_DURATIONS, WHEN_MISSED_CHOICES
 from progress import (
     VALID_PROGRESS_PERIODS,
+    build_habit_history,
     calculate_overall_progress,
+    completion_count_on,
     current_break,
+    current_period_progress,
     habit_summary,
     period_start,
 )
@@ -365,32 +368,29 @@ INACTIVE_STATUSES = ("paused", "archived", "expired")
 
 
 def is_due_today(habit, today):
-    """Check if a habit should show up on today's list."""
+    """Determine whether a habit belongs in today's habit list."""
     if habit.get("status", "active") in INACTIVE_STATUSES:
         return False
 
     today_iso = today.isoformat()
 
-    # habits that haven't reached their start date yet aren't due (US-23)
     start_date = habit.get("start_date")
     if start_date and start_date > today_iso:
         return False
 
-    completed = {d for d in habit.get("completed_dates", []) if isinstance(d, str)}
-    skipped = {d for d in habit.get("skipped_dates", []) if isinstance(d, str)}
+    today_count = completion_count_on(habit, today)
+    progress = current_period_progress(habit, today)
+    skipped_today = today_iso in habit.get("skipped_dates", [])
 
-    # a habit on a break leaves the list, unless it was already finished before the break
     if current_break(habit, today):
-        return today_iso in completed
+        return today_count > 0
 
-    # keep habits finished or skipped today on the list so they show their status
-    if today_iso in completed or today_iso in skipped:
+    # Retain completed and skipped habits so users see their status.
+    if today_count > 0 or skipped_today:
         return True
 
-    # due until the target is hit for this period (skipped days don't count toward it)
-    start_iso = period_start(habit.get("frequency") or "daily", today).isoformat()
-    completed_this_period = sum(1 for d in completed if start_iso <= d <= today_iso)
-    return completed_this_period < (habit.get("target") or 1)
+    # Continue showing habits until the period target is reached.
+    return progress["completed"] < progress["target"]
 
 def _previous_period(frequency, today):
     """Return the first and last day of the period before the current one"""
@@ -505,7 +505,20 @@ def habit_dashboard():
         habit["overdue"] = is_overdue(habit, today_date)
     todays_habits.sort(key=lambda habit: not habit["overdue"])
 
-    completion_by_id = {habit["id"]: today in habit.get("completed_dates", []) for habit in habits}
+    progress_by_id = {
+        habit["id"]: current_period_progress(habit, today_date)
+        for habit in habits
+    }
+
+    today_count_by_id = {
+        habit["id"]: completion_count_on(habit, today_date)
+        for habit in habits
+    }
+
+    completion_by_id = {
+        habit_id: progress["completed"] >= progress["target"]
+        for habit_id, progress in progress_by_id.items()
+    }
 
     skipped_by_id = {habit["id"]: today in habit.get("skipped_dates", []) for habit in habits}
 
@@ -557,6 +570,8 @@ def habit_dashboard():
         habits=habits,
         todays_habits=todays_habits,
         completion_by_id=completion_by_id,
+        progress_by_id=progress_by_id,
+        today_count_by_id=today_count_by_id,
         skipped_by_id=skipped_by_id,
         resume_by_id=resume_by_id,
         on_break_count=on_break_count,
@@ -846,6 +861,39 @@ def _owned_document(collection_name, document_id):
 def _owned_habit(habit_id):
     return _owned_document("habits", habit_id)
 
+@app.route("/habits/<habit_id>/history")
+@login_required
+def habit_history(habit_id):
+    """Display the completion history of an owned habit."""
+    _, habit = _owned_habit(habit_id)
+    today = current_app_date()
+
+    history = build_habit_history(
+        habit,
+        today,
+        overdue=is_overdue(habit, today),
+    )
+
+    period = request.args.get("period", "all")
+
+    if period not in ("all", "7", "30", "90"):
+        period = "all"
+
+    if period != "all":
+        start_date = today - timedelta(days=int(period) - 1)
+        history = [
+            entry for entry in history
+            if entry["end"] >= start_date
+        ]
+
+    return render_template(
+        "apps/habit_tracker/history.html",
+        habit=habit,
+        habit_id=habit_id,
+        history=history,
+        selected_period=period,
+        today=today,
+    )
 
 def _owned_notification(notification_id):
     return _owned_document("notifications", notification_id)
@@ -872,11 +920,58 @@ def mark_all_notifications_read():
     )
     return {"ok": True}
 
+def _update_completion_count(query, habit, today, new_count):
+    """Persist check-ins for a date without losing older history."""
+    today_str = today.isoformat()
+    old_history = habit.get("completion_history") or []
+
+    history = [
+        record.copy() if isinstance(record, dict) else record
+        for record in old_history
+    ]
+
+    updated = False
+
+    for record in history:
+        if isinstance(record, dict) and str(record.get("date"))[:10] == today_str:
+            record["status"] = "completed" if new_count else "undone"
+            record["count"] = new_count
+            updated = True
+            break
+
+    if not updated:
+        history.append({
+            "date": today_str,
+            "status": "completed" if new_count else "undone",
+            "count": new_count,
+        })
+
+    expected = (
+        {"completion_history": old_history}
+        if "completion_history" in habit
+        else {"completion_history": {"$exists": False}}
+    )
+
+    update = {
+        "$set": {"completion_history": history},
+    }
+
+    if new_count > 0:
+        update["$addToSet"] = {"completed_dates": today_str}
+        update["$pull"] = {"skipped_dates": today_str}
+    else:
+        update["$pull"] = {"completed_dates": today_str}
+
+    result = get_db()["habits"].update_one(
+        {**query, **expected},
+        update,
+    )
+
+    return result.modified_count == 1
 
 @app.route("/habits/<habit_id>/complete", methods=["POST"])
 def complete_habit(habit_id):
-    """Record one daily completion for the authenticated user's habit."""
-
+    """Record one check-in for an owned habit."""
     if not session.get("user_id") or not session.get("user_email"):
         return jsonify({"error": "Login required"}), 401
 
@@ -892,73 +987,67 @@ def complete_habit(habit_id):
     if current_break(habit, today):
         return jsonify({"error": "Habit is on a break"}), 409
 
-    if today_str in habit.get("completed_dates", []):
-        return jsonify({"error": "Already completed today"}), 409
-
     if not is_due_today(habit, today):
+        return jsonify({"error": "Habit is not due"}), 409
+
+    progress = current_period_progress(habit, today)
+
+    if progress["completed"] >= progress["target"]:
         return jsonify({"error": "Habit target already reached"}), 409
 
-    # completing a habit skipped today replaces the skip (a day can't be both)
-    result = get_db()["habits"].update_one(
-        {
-            **query,
-            "completed_dates": {"$ne": today_str},
-        },
-        {
-            "$addToSet": {"completed_dates": today_str},
-            "$pull": {"skipped_dates": today_str},
-        },
-    )
+    current_count = completion_count_on(habit, today)
+    new_count = current_count + 1
 
-    if result.modified_count == 0:
-        return jsonify({"error": "Completion not recorded"}), 409
+    if not _update_completion_count(query, habit, today, new_count):
+        return jsonify({"error": "Please retry completion"}), 409
 
-    return jsonify(
-        {
-            "habit_id": habit_id,
-            "completed": True,
-            "completed_date": today_str,
-            "message": "Habit marked as complete",
-        }
-    ), 200
+    period_completed = progress["completed"] + 1
+
+    return jsonify({
+        "habit_id": habit_id,
+        "completed": period_completed >= progress["target"],
+        "completed_date": today_str,
+        "count": new_count,
+        "period_completed": period_completed,
+        "target": progress["target"],
+        "message": "Habit check-in recorded",
+    }), 200
 
 
 @app.route("/habits/<habit_id>/uncomplete", methods=["POST"])
 def uncomplete_habit(habit_id):
-    """Undo today's completion for the authenticated user's habit."""
-
+    """Undo one of today's check-ins for an owned habit."""
     if not session.get("user_id") or not session.get("user_email"):
         return jsonify({"error": "Login required"}), 401
 
     _validate_habit_form_token()
 
     query, habit = _owned_habit(habit_id)
-    today_str = current_app_date().isoformat()
+    today = current_app_date()
+    today_str = today.isoformat()
 
-    if today_str not in habit.get("completed_dates", []):
-        return jsonify({"error": "Habit is not completed today"}), 409
+    current_count = completion_count_on(habit, today)
 
-    result = get_db()["habits"].update_one(
-        {
-            **query,
-            "completed_dates": today_str,
-        },
-        {
-            "$pull": {"completed_dates": today_str},
-        },
-    )
+    if current_count <= 0:
+        return jsonify({"error": "No completion to undo today"}), 409
 
-    if result.modified_count == 0:
-        return jsonify({"error": "Completion not removed"}), 409
+    progress = current_period_progress(habit, today)
+    new_count = current_count - 1
 
-    return jsonify(
-        {
-            "habit_id": habit_id,
-            "completed": False,
-            "completed_date": today_str,
-            "message": "Habit completion undone",
-        }
-    ), 200
+    if not _update_completion_count(query, habit, today, new_count):
+        return jsonify({"error": "Please retry undo"}), 409
+
+    period_completed = max(progress["completed"] - 1, 0)
+
+    return jsonify({
+        "habit_id": habit_id,
+        "completed": period_completed >= progress["target"],
+        "completed_date": today_str,
+        "count": new_count,
+        "period_completed": period_completed,
+        "target": progress["target"],
+        "message": "Habit check-in undone",
+    }), 200
 
 def _parse_history_row(row):
     if row["completed_date"]:
@@ -975,14 +1064,21 @@ def _parse_history_row(row):
 
 
 def _parse_habit_file(payload):
-    """Validate a single exported habit completely before any database write."""
-    reader = csv.DictReader(io.StringIO(payload.decode("utf-8-sig"), newline=""), strict=True)
-    if reader.fieldnames != HABIT_FILE_FIELDS:
-        raise ValueError("The file must contain the exported habit columns in order.")
+    """Validate a habit file before writing anything to the database."""
+    reader = csv.DictReader(
+        io.StringIO(payload.decode("utf-8-sig"), newline=""),
+        strict=True,
+    )
+    has_counts = reader.fieldnames == [*HABIT_FILE_FIELDS, "count"]
+    if reader.fieldnames != HABIT_FILE_FIELDS and not has_counts:
+        raise ValueError(
+            "The file must contain the supported habit columns in order."
+        )
 
     details = None
     completed_dates = []
     skipped_dates = []
+    completion_counts = {}
     for row in reader:
         if None in row or any(value is None for value in row.values()):
             raise ValueError("Every row must contain all habit columns.")
@@ -995,29 +1091,61 @@ def _parse_habit_file(payload):
             raise ValueError("All rows must describe the same habit.")
         details = current
         history = _parse_history_row(row)
-        if history is not None:
-            history_date, status = history
-            dates = completed_dates if status == "completed" else skipped_dates
-            if history_date not in dates:
-                dates.append(history_date)
+
+        if history is None:
+            if has_counts and row["count"] not in ("", "0"):
+                raise ValueError("A completion count requires a date.")
+            continue
+        history_date, status = history
+        if has_counts:
+            raw_count = row["count"]
+            if status == "completed":
+                if not raw_count.isdigit() or int(raw_count) < 1:
+                    raise ValueError(
+                        "Completed history must have a positive count."
+                    )
+                count = int(raw_count)
+            else:
+                if raw_count not in ("", "0"):
+                    raise ValueError(
+                        "Skipped history cannot have completions."
+                    )
+                count = 0
+            if history_date in completion_counts:
+                previous = completion_counts[history_date]
+                if previous != (status, count):
+                    raise ValueError(
+                        "Conflicting history entries for the same date."
+                    )
+            else:
+                completion_counts[history_date] = (status, count)
+        dates = (
+            completed_dates
+            if status == "completed"
+            else skipped_dates
+        )
+        if history_date not in dates:
+            dates.append(history_date)
 
     if details is None:
         raise ValueError("The file contains no habit.")
     if not details["name"].strip():
-        raise ValueError("Enter a habit name.")
+        raise ValueError("Enter a name for your habit.")
     if not details["target"].isdigit() or int(details["target"]) < 1:
         raise ValueError("Target must be a positive whole number.")
     if details["frequency"] not in FREQUENCY_CHOICES:
         raise ValueError("Choose a supported frequency.")
     created_at = details["created_at"]
     if created_at:
-        created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        created_at = datetime.fromisoformat(
+            created_at.replace("Z", "+00:00")
+        )
         if created_at.tzinfo is None:
             created_at = created_at.replace(tzinfo=timezone.utc)
         created_at = created_at.astimezone(timezone.utc)
     else:
         created_at = datetime.now(timezone.utc)
-    return {
+    habit = {
         "name": details["name"],
         "description": details["description"],
         "target": int(details["target"]),
@@ -1026,6 +1154,17 @@ def _parse_habit_file(payload):
         "completed_dates": completed_dates,
         "skipped_dates": skipped_dates,
     }
+    if has_counts:
+        habit["completion_history"] = [
+            {
+                "date": history_date,
+                "status": status,
+                "count": count,
+            }
+            for history_date, (status, count)
+            in completion_counts.items()
+        ]
+    return habit
 
 
 def _format_export_datetime(value):
@@ -1078,7 +1217,19 @@ def export_habit(habit_id):
     _, habit = _owned_habit(habit_id)
     created_at = _format_export_datetime(habit.get("created_at"))
     output = io.StringIO(newline="")
-    writer = csv.DictWriter(output, fieldnames=HABIT_FILE_FIELDS)
+    history_rows = _serialize_habit_history(habit)
+    has_multiple_checkins = any(
+        status == "completed"
+        and completion_count_on(habit, date.fromisoformat(history_date)) > 1
+        for history_date, status in history_rows
+        if history_date
+    )
+    fields = (
+        [*HABIT_FILE_FIELDS, "count"]
+        if has_multiple_checkins
+        else HABIT_FILE_FIELDS
+    )
+    writer = csv.DictWriter(output, fieldnames=fields)
     writer.writeheader()
     details = {
         "habit_id": str(habit["_id"]),
@@ -1088,14 +1239,21 @@ def export_habit(habit_id):
         "frequency": habit.get("frequency", ""),
         "created_at": created_at or "",
     }
-    for history_date, status in _serialize_habit_history(habit):
-        writer.writerow(
-            {
-                **details,
-                "completed_date": history_date,
-                "status": status,
-            }
-        )
+    for history_date, status in history_rows:
+        row = {
+            **details,
+            "completed_date": history_date,
+            "status": status,
+        }
+        if has_multiple_checkins:
+            row["count"] = (
+                completion_count_on(
+                    habit, date.fromisoformat(history_date)
+                )
+                if history_date and status == "completed"
+                else 0
+            )
+        writer.writerow(row)
 
     filename = secure_filename(habit.get("name", ""))[:80] or "habit"
     response = send_file(

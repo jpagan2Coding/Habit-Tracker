@@ -96,6 +96,40 @@ def _completion_counts(habit):
             counts[parsed_date] = 1
     return counts
 
+def completion_count_on(habit, on_date):
+    """Return the number of completions for a particular date."""
+    return max(_completion_counts(habit).get(on_date, 0), 0)
+
+
+def current_period_progress(habit, today):
+    """Return completion progress for the current day, week, or month."""
+    frequency = habit.get("frequency") or "daily"
+    start = period_start(frequency, today)
+    target = max(int(habit.get("target") or 1), 1)
+
+    counts = _completion_counts(habit)
+
+    completed = sum(
+        count
+        for day, count in counts.items()
+        if start <= day <= today
+    )
+
+    completed = min(completed, target)
+
+    if completed >= target:
+        status = "Complete"
+    elif completed > 0:
+        status = "In Progress"
+    else:
+        status = "Active"
+
+    return {
+        "completed": completed,
+        "target": target,
+        "percentage": round(completed / target * 100),
+        "status": status,
+    }
 
 def calculate_overall_progress(habits, end_date=None, period_days=7):
     """Return scheduled, completed, and percentage values for a date period."""
@@ -306,3 +340,41 @@ def habit_summary(habit, today, period_days=7):
         "percentage": round(completed / expected * 100) if expected else None,
         "periods": recent,
     }
+
+def build_habit_history(habit, today, *, overdue=False):
+    """Return a habit's completion history, newest period first."""
+    history = []
+
+    status_labels = {
+        "met": "Completed",
+        "missed": "Missed",
+        "skipped": "Skipped",
+        "paused": "Paused",
+        "in_progress": "In progress",
+    }
+
+    for period in reversed(habit_periods(habit, today)):
+        status = period["status"]
+
+        if status == "in_progress":
+            if overdue:
+                label = "Overdue"
+            elif period["completed"] or period["skipped"]:
+                label = "In progress"
+            else:
+                continue
+        else:
+            label = status_labels[status]
+
+        history.append(
+            {
+                "start": period["start"],
+                "end": period["end"],
+                "status": label,
+                "completed": period["completed"],
+                "skipped": period["skipped"],
+                "target": period["target"],
+            }
+        )
+
+    return history
