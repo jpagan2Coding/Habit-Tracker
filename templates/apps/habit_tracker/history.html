@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Completion History | Habit Tracker{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet"
+      href="{{ url_for('static', filename='css/habit-tracker.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="mx-auto max-w-5xl px-4 py-8">
+
+    <a href="{{ url_for('habit_dashboard') }}"
+       class="text-sm font-semibold text-indigo-700 hover:underline">
+        &larr; Back to Dashboard
+    </a>
+
+    <div class="mt-6">
+        <h1 class="text-3xl font-bold text-slate-900">
+            Completion History
+        </h1>
+
+        <h2 class="mt-2 text-xl font-semibold text-slate-700">
+            {{ habit.name }}
+        </h2>
+
+        <p class="mt-1 text-sm text-slate-500">
+            {{ habit.frequency | capitalize }} habit
+            &middot; Target: {{ habit.target or 1 }}
+        </p>
+    </div>
+
+    <div class="mt-8 rounded-xl border border-slate-200 bg-white">
+
+        <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 p-5">
+
+            <h2 class="text-lg font-semibold text-slate-900">
+                Habit History
+            </h2>
+
+            <form method="GET"
+                  action="{{ url_for('habit_history', habit_id=habit_id) }}"
+                  class="flex items-center gap-2">
+
+                <label for="period"
+                       class="text-sm font-medium text-slate-600">
+                    Date range
+                </label>
+
+                <select id="period"
+                        name="period"
+                        class="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+
+                    {% for value, label in [
+                        ('all', 'All time'),
+                        ('7', 'Last 7 days'),
+                        ('30', 'Last 30 days'),
+                        ('90', 'Last 90 days')
+                    ] %}
+                    <option value="{{ value }}"
+                        {% if selected_period == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+
+                </select>
+
+                <button type="submit"
+                        class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+                    Apply
+                </button>
+
+            </form>
+        </div>
+
+        {% if history %}
+
+        {% set status_classes = {
+            'Completed': 'bg-emerald-50 text-emerald-700',
+            'Missed': 'bg-red-50 text-red-700',
+            'Skipped': 'bg-slate-100 text-slate-600',
+            'Overdue': 'bg-amber-50 text-amber-700',
+            'Paused': 'bg-blue-50 text-blue-700',
+            'In progress': 'bg-indigo-50 text-indigo-700'
+        } %}
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-sm">
+
+                <thead class="bg-slate-50 text-slate-600">
+                    <tr>
+                        <th scope="col" class="px-5 py-3">Date</th>
+                        <th scope="col" class="px-5 py-3">Status</th>
+                        <th scope="col" class="px-5 py-3">Progress</th>
+                    </tr>
+                </thead>
+
+                <tbody class="divide-y divide-slate-200">
+
+                    {% for entry in history %}
+                    <tr>
+                        <td class="px-5 py-4 text-slate-700">
+                            {{ entry.start.strftime('%b %d, %Y') }}
+
+                            {% if entry.start != entry.end %}
+                                &ndash; {{ entry.end.strftime('%b %d, %Y') }}
+                            {% endif %}
+                        </td>
+
+                        <td class="px-5 py-4">
+                            <span class="rounded-full px-3 py-1 text-xs font-semibold {{ status_classes[entry.status] }}">
+                                {{ entry.status }}
+                            </span>
+                        </td>
+
+                        <td class="px-5 py-4 text-slate-600">
+                            {{ entry.completed }} / {{ entry.target }} completed
+
+                            {% if entry.skipped %}
+                            <span class="block text-xs text-slate-500">
+                                {{ entry.skipped }} skipped
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+
+                </tbody>
+            </table>
+        </div>
+
+        {% else %}
+
+        <div class="px-6 py-12 text-center">
+            <p class="font-semibold text-slate-700">
+                No completion history available yet.
+            </p>
+
+            <p class="mt-2 text-sm text-slate-500">
+                Habit history will appear here as you track your habit.
+            </p>
+        </div>
+
+        {% endif %}
+
+    </div>
+</section>
+{% endblock %}
