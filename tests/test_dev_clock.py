@@ -133,7 +133,7 @@ def test_developer_clock_reset_restores_actual_date(client, app, monkeypatch):
     assert response.status_code == 302
     with client.session_transaction() as session:
         assert DEV_CLOCK_SESSION_KEY not in session
-    actual_date = datetime.now(timezone.utc).date().isoformat()
+    # actual_date = datetime.now(timezone.utc).date().isoformat()
     actual_datetime = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M")
     assert f'value="{actual_datetime}"' in client.get("/settings").get_data(as_text=True)
 
