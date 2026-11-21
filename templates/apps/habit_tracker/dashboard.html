@@ -465,8 +465,8 @@
                             <div class="mt-3 flex items-center gap-3">
                                 <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
                                     <div
-                                        class="h-full bg-emerald-500"
-                                        style="width: {{ habit_progress.percentage }}%">
+                                        class="habit-progress-fill h-full bg-emerald-500"
+                                        data-progress="{{ habit_progress.percentage }}">
                                     </div>
                                 </div>
 
@@ -809,6 +809,11 @@
 </div>
 
 <script>
+document.querySelectorAll(".habit-progress-fill").forEach(progressFill => {
+    const percentage = Number.parseFloat(progressFill.dataset.progress);
+    progressFill.style.width = `${Number.isFinite(percentage) ? percentage : 0}%`;
+});
+
 document.querySelectorAll(".complete-habit-form").forEach(form => {
     form.addEventListener("submit", async event => {
         event.preventDefault();
