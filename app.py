@@ -1,6 +1,7 @@
 import csv
 import io
 import os
+import re
 import secrets
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache, wraps
@@ -250,14 +251,17 @@ def login():
     email = ""
 
     if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
+        identifier = request.form.get("email", "").strip()
+        email = identifier
         password = request.form.get("password", "")
 
         if not email or not password:
             error = "Enter both your email and password to continue."
         else:
             try:
-                user = get_db()["users"].find_one({"email": email})
+                user = get_db()["users"].find_one(
+                    {"$or": [{"email": identifier.lower()}, {"username": identifier}]}
+                )
             except (OSError, PyMongoError, RuntimeError):
                 user = None
 
@@ -266,7 +270,7 @@ def login():
                 session.clear()
                 session["user_id"] = str(user.get("_id", ""))
                 session["username"] = user.get("username", email)
-                session["user_email"] = email
+                session["user_email"] = user.get("email", email).lower()
                 return redirect(url_for("habit_dashboard"))
 
             error = "Invalid email or password."
@@ -637,8 +641,11 @@ def register():
         confirm_password = request.form.get("confirm_password", "")
 
         error = None
-        if not username or not email or not password:
+        username_error = _validate_username(username)
+        if not username_error and (not username or not email or not password):
             error = "All fields are required."
+        elif username_error:
+            error = username_error
         elif len(password) < 8:
             error = "Password must be at least 8 characters long."
         elif password != confirm_password:
@@ -709,6 +716,28 @@ def _duplicate_user_error(users, username, email):
     return "That email or username is already in use."
 
 
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _validate_username(username):
+    if not username:
+        return "Enter a username."
+    if len(username) > 80:
+        return "Username must be 80 characters or fewer."
+    if not USERNAME_PATTERN.fullmatch(username):
+        return "Username may contain only letters, numbers, underscores, and hyphens."
+    return None
+
+
+def _authenticated_user(users):
+    user_email = session.get("user_email")
+    user_id = session.get("user_id")
+    user_filter = {"email": user_email}
+    if user_id and ObjectId.is_valid(user_id):
+        user_filter = {"$or": [{"_id": ObjectId(user_id)}, {"email": user_email}]}
+    return users.find_one(user_filter)
+
+
 # text size options (cookie value -> label shown on the settings page)
 TEXT_SIZES = {
     "small": "Small",
@@ -731,8 +760,20 @@ def inject_text_size():
 
 
 @app.route("/settings", methods=["GET", "POST"])
+@login_required
 def settings():
     if request.method == "POST":
+        if request.form.get("action") == "save_settings":
+            return _save_settings()
+        if request.form.get("action") in {"update_username", "username"}:
+            return _update_username()
+        if request.form.get("action") in {"change_password", "password"}:
+            return _change_password()
+        if "new_username" in request.form:
+            return _update_username()
+        if "new_password" in request.form or "current_password" in request.form:
+            return _change_password()
+
         size = request.form.get("text_size", "default")
         if request.form.get("reset") or size not in TEXT_SIZES:
             size = "default"
@@ -745,14 +786,214 @@ def settings():
             response.set_cookie(TEXT_SIZE_COOKIE, size, max_age=60 * 60 * 24 * 365, samesite="Lax")
         return response
 
+    users = get_db()["users"]
+    user = _authenticated_user(users)
+    current_username = user.get("username", session.get("username", "")) if user else session.get("username", "")
+    current_email = user.get("email", session.get("user_email", "")) if user else session.get("user_email", "")
+
     return render_template(
         "settings.html",
         page_id="settings",
         text_sizes=TEXT_SIZES,
+        current_username=current_username,
+        current_email=current_email,
         dev_time_travel_enabled=dev_time_travel_enabled(),
         simulated_datetime=current_app_datetime().strftime("%Y-%m-%dT%H:%M"),
         habit_csrf_token=_habit_form_token(),
     )
+
+
+@app.route("/settings/username", methods=["POST"])
+@login_required
+def update_username():
+    return _update_username()
+
+
+@app.route("/settings/password", methods=["POST"])
+@login_required
+def change_password():
+    return _change_password()
+
+
+def _save_settings():
+    _validate_habit_form_token()
+    users = get_db()["users"]
+    user = _authenticated_user(users)
+    if user is None:
+        flash("Your account could not be found.", "error")
+        return redirect(url_for("settings"))
+
+    new_username = request.form.get("new_username", "").strip()
+    username_error = _validate_username(new_username)
+    if username_error is None:
+        for existing in users.find({"username": new_username}):
+            if str(existing.get("_id")) != str(user.get("_id")):
+                username_error = "Username is already taken. Please choose another."
+                break
+
+    password_error = None
+    current_password = request.form.get("current_password", "")
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+    password_requested = bool(new_password or confirm_password)
+
+    if password_requested:
+        if not current_password:
+            password_error = "Enter your current password."
+        elif not new_password:
+            password_error = "Enter a new password."
+        elif not confirm_password:
+            password_error = "Confirm your new password."
+        elif len(new_password) < 8:
+            password_error = "New password must be at least 8 characters long."
+        elif new_password != confirm_password:
+            password_error = "Passwords do not match."
+        elif not check_password_hash(user.get("password", ""), current_password):
+            password_error = "Current password is incorrect."
+
+    if username_error:
+        flash(username_error, "error")
+        return redirect(url_for("settings"))
+    if password_error:
+        flash(password_error, "error")
+        return redirect(url_for("settings"))
+
+    updates = {"username": new_username}
+    if password_requested:
+        updates["password"] = generate_password_hash(new_password)
+
+    try:
+        ensure_user_indexes(users)
+        result = users.update_one({"_id": user["_id"]}, {"$set": updates})
+    except DuplicateKeyError:
+        flash("Username is already taken. Please choose another.", "error")
+        return redirect(url_for("settings"))
+    except (OSError, PyMongoError, RuntimeError) as e:
+        app.logger.error(f"Database error while saving settings: {e}")
+        flash("Database error occurred while saving settings.", "error")
+        return redirect(url_for("settings"))
+
+    if result.matched_count == 0:
+        flash("Your account could not be found.", "error")
+        return redirect(url_for("settings"))
+
+    session["username"] = new_username
+    size = request.form.get("text_size", "default")
+    if request.form.get("reset") or size not in TEXT_SIZES:
+        size = "default"
+
+    response = redirect(url_for("settings"))
+    if size == "default":
+        response.delete_cookie(TEXT_SIZE_COOKIE)
+    else:
+        response.set_cookie(
+            TEXT_SIZE_COOKIE,
+            size,
+            max_age=60 * 60 * 24 * 365,
+            samesite="Lax",
+        )
+
+    flash(
+        "Your Settings Saved successfully."
+        if password_requested
+        else "Your Settings Saved successfully.",
+        "success",
+    )
+    return response
+
+
+def _update_username():
+    _validate_habit_form_token()
+    new_username = request.form.get("new_username", request.form.get("username", "")).strip()
+
+    error = _validate_username(new_username)
+    users = get_db()["users"]
+    user = _authenticated_user(users)
+    if user is None:
+        error = "Your account could not be found."
+    elif error is None:
+        for existing in users.find({"username": new_username}):
+            if str(existing.get("_id")) != str(user.get("_id")):
+                error = "Username is already taken. Please choose another."
+                break
+
+    if error:
+        flash(error, "error")
+        return redirect(url_for("settings"))
+
+    try:
+        ensure_user_indexes(users)
+        result = users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"username": new_username}},
+        )
+    except DuplicateKeyError:
+        flash("Username is already taken. Please choose another.", "error")
+        return redirect(url_for("settings"))
+    except (OSError, PyMongoError, RuntimeError) as e:
+        app.logger.error(f"Database error while updating username: {e}")
+        flash("Database error occurred while updating username.", "error")
+        return redirect(url_for("settings"))
+
+    if result.matched_count == 0:
+        flash("Your account could not be found.", "error")
+        return redirect(url_for("settings"))
+
+    session["username"] = new_username
+    flash("Username updated successfully.", "success")
+    return redirect(url_for("settings"))
+
+
+def _change_password():
+    _validate_habit_form_token()
+    current_password = request.form.get("current_password", "")
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get(
+        "confirm_password",
+        request.form.get("confirm_new_password", ""),
+    )
+
+    if not current_password:
+        error = "Enter your current password."
+    elif not new_password:
+        error = "Enter a new password."
+    elif not confirm_password:
+        error = "Confirm your new password."
+    elif len(new_password) < 8:
+        error = "New password must be at least 8 characters long."
+    elif new_password != confirm_password:
+        error = "Passwords do not match."
+    else:
+        error = None
+
+    users = get_db()["users"]
+    user = _authenticated_user(users)
+    if error is None:
+        if user is None:
+            error = "Your account could not be found."
+        elif not check_password_hash(user.get("password", ""), current_password):
+            error = "Current password is incorrect."
+
+    if error:
+        flash(error, "error")
+        return redirect(url_for("settings"))
+
+    try:
+        result = users.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"password": generate_password_hash(new_password)}},
+        )
+    except (OSError, PyMongoError, RuntimeError) as e:
+        app.logger.error(f"Database error while changing password: {e}")
+        flash("Database error occurred while changing password.", "error")
+        return redirect(url_for("settings"))
+
+    if result.matched_count == 0:
+        flash("Your account could not be found.", "error")
+        return redirect(url_for("settings"))
+
+    flash("Password changed successfully.", "success")
+    return redirect(url_for("settings"))
 
 
 @app.route("/settings/dev-clock", methods=["POST"])

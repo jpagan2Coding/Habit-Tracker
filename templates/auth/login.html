@@ -37,8 +37,8 @@
 
                 <form method="post" action="{{ url_for('login') }}" class="auth-form">
                     <div class="auth-field">
-                        <label for="email">Email address</label>
-                        <input id="email" name="email" type="email" value="{{ email }}" placeholder="you@example.com" autocomplete="email" required>
+                        <label for="email">Email address or username</label>
+                        <input id="email" name="email" value="{{ email }}" placeholder="you@example.com or username" autocomplete="username" required>
                     </div>
 
                     <div class="auth-field">
