@@ -893,12 +893,7 @@ def _save_settings():
             samesite="Lax",
         )
 
-    flash(
-        "Your Settings Saved successfully."
-        if password_requested
-        else "Your Settings Saved successfully.",
-        "success",
-    )
+    flash("Username and display preferences saved successfully", "success")
     return response
 
 
