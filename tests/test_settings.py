@@ -189,4 +189,4 @@ def test_save_settings_ignores_autofilled_current_password_without_new_password(
     )
 
     assert response.status_code == 200
-    assert b"Username and display preferences saved successfully" in response.data
+    assert b"Your settings and preferences saved successfully" in response.data
