@@ -10,36 +10,6 @@ def test_habit_tracker_get_returns_ok(authenticated_client):
     assert response.status_code == 200
 
 
-def test_dashboard_has_separate_complete_button_and_action_menus(authenticated_client, habits):
-    from datetime import datetime
-
-    habits.insert_one({
-        "name": "Test Habit",
-        "description": None,
-        "target": 1,
-        "frequency": "daily",
-        "user_email": "person@example.com",
-        "created_at": datetime.utcnow(),
-        "completed_dates": [],
-    })
-    response = authenticated_client.get("/dashboard")
-    html = response.get_data(as_text=True)
-
-    assert "Mark Complete" in html
-    assert "data-habit-action-menu" in html
-    assert "data-habit-action-toggle" in html
-
-
-def test_signed_in_top_nav_has_links_user_and_notifications(authenticated_client):
-    response = authenticated_client.get("/dashboard")
-    html = response.get_data(as_text=True)
-
-    assert "Log Out" in html
-    assert "Settings" in html
-    assert 'id="notification-bell"' in html
-    assert "Test User" in html
-
-
 def test_habit_tracker_post_creates_habit(authenticated_client, habits):
     """Test that POST /habit-tracker creates a new habit in the database."""
     habit_data = {

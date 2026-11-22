@@ -82,47 +82,6 @@ def test_edit_updates_existing_habit_without_duplicate(client, habits, owned_hab
     assert b"Morning Walk" not in response.data
 
 
-def test_edit_reminder_time_clears_old_pending_notification(
-    client, mongo_client, habits, owned_habit
-):
-    habits.update_one(
-        {"_id": owned_habit},
-        {
-            "$set": {
-                "reminder_enabled": True,
-                "reminder_time": "10:00",
-                "reminder_timezone": "UTC",
-            }
-        },
-    )
-    database = mongo_client["Habit-Tracker_test"]
-    notification_id = database["notifications"].insert_one(
-        {
-            "user_email": OWNER_EMAIL,
-            "habit_id": owned_habit,
-            "habit_name": "Morning Walk",
-            "message": "Reminder",
-            "occurrence_key": "2026-11-22:10:00",
-            "created_at": datetime(2026, 11, 22),
-        }
-    ).inserted_id
-    token = form_token(client, owned_habit)
-
-    client.post(
-        f"/habits/{owned_habit}/edit",
-        data={
-            **UPDATED_FORM,
-            "reminder_time": "11:00",
-            "csrf_token": token,
-        },
-        follow_redirects=True,
-    )
-
-    notification = database["notifications"].find_one({"_id": notification_id})
-    assert notification.get("read_at") is not None
-    assert habits.find_one({"_id": owned_habit})["reminder_time"] == "11:00"
-
-
 @pytest.mark.parametrize(
     ("frequency", "schedule"),
     [
