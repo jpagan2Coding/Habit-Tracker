@@ -7,6 +7,8 @@ from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache, wraps
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from pymongo import ASCENDING, MongoClient
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 import certifi
 from bson import ObjectId
@@ -415,6 +417,32 @@ def _habit_start(habit):
         return created_at.date()
 
     return None
+
+
+def _validate_completion_date(value, habit, today):
+    """Validate a selected completion date without modifying the habit."""
+    try:
+        selected = date.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None, "Choose a valid completion date."
+
+    if selected.isoformat() != value:
+        return None, "Completion dates must use YYYY-MM-DD."
+
+    if selected > today:
+        return None, "Completion date cannot be in the future."
+
+    start = _habit_start(habit)
+    if start is not None and selected < start:
+        return None, "Completion date cannot be before the habit starts."
+
+    if habit.get("status", "active") in INACTIVE_STATUSES:
+        return None, "This habit is inactive."
+
+    if current_break(habit, selected):
+        return None, "This habit was on a break on the selected date."
+
+    return selected, None
 
 
 def is_overdue(habit, today):
@@ -1156,7 +1184,7 @@ def mark_all_notifications_read():
     )
     return {"ok": True}
 
-def _update_completion_count(query, habit, today, new_count):
+def _update_completion_count(query, habit, today, new_count, *, submission_id=None):
     """Persist check-ins for a date without losing older history."""
     today_str = today.isoformat()
     old_history = habit.get("completion_history") or []
@@ -1198,12 +1226,136 @@ def _update_completion_count(query, habit, today, new_count):
     else:
         update["$pull"] = {"completed_dates": today_str}
 
+    if submission_id is not None:
+        query = {
+            **query,
+            "completion_submission_ids": {"$ne": submission_id},
+        }
+        update.setdefault("$addToSet", {})[
+            "completion_submission_ids"
+        ] = submission_id
+
     result = get_db()["habits"].update_one(
         {**query, **expected},
         update,
     )
 
     return result.modified_count == 1
+
+
+def _completion_form_signer():
+    return URLSafeTimedSerializer(
+        app.config["SECRET_KEY"],
+        salt="us38-completion-form",
+    )
+
+
+def _completion_period_cutoff(habit, selected, today):
+    """Include later check-ins in the selected week or month."""
+    frequency = habit.get("frequency") or "daily"
+    start = period_start(frequency, selected)
+
+    if frequency == "weekly":
+        end = start + timedelta(days=6)
+    elif frequency == "monthly":
+        next_month = (start.replace(day=28) + timedelta(days=4)).replace(day=1)
+        end = next_month - timedelta(days=1)
+    else:
+        end = selected
+
+    return min(end, today)
+
+
+@app.route("/habits/<habit_id>/record-completion", methods=["GET", "POST"])
+@login_required
+def record_habit_completion(habit_id):
+    """Record one check-in on a user-selected date."""
+    query, habit = _owned_habit(habit_id)
+    today = current_app_date()
+    selected_value = today.isoformat()
+    error = None
+    status_code = 200
+    signer = _completion_form_signer()
+
+    if request.method == "POST":
+        _validate_habit_form_token()
+        selected_value = request.form.get("completion_date", "")
+        submitted_token = request.form.get("submission_token", "")
+        try:
+            payload = signer.loads(submitted_token, max_age=3600)
+        except (BadSignature, SignatureExpired):
+            abort(400, description="This form expired or is invalid. Reload and try again.")
+
+        if (
+            not isinstance(payload, dict)
+            or payload.get("habit_id") != habit_id
+            or payload.get("user_email") != session["user_email"]
+            or not isinstance(payload.get("submission_id"), str)
+            or not payload["submission_id"]
+        ):
+            abort(400, description="Invalid completion form.")
+
+        submission_id = payload["submission_id"]
+
+        if submission_id in (habit.get("completion_submission_ids") or []):
+            flash("This completion form has already been submitted.", "error")
+            return redirect(url_for("habit_history", habit_id=habit_id))
+
+        selected, error = _validate_completion_date(
+            selected_value, habit, today
+        )
+
+        if error:
+            status_code = 400
+        else:
+            cutoff = _completion_period_cutoff(habit, selected, today)
+            progress = current_period_progress(habit, cutoff)
+
+            if progress["completed"] >= progress["target"]:
+                error = "The target for that day, week, or month is already reached."
+                status_code = 409
+            else:
+                new_count = completion_count_on(habit, selected) + 1
+
+                if _update_completion_count(
+                    query,
+                    habit,
+                    selected,
+                    new_count,
+                    submission_id=submission_id,
+                ):
+                    flash(
+                        f"One check-in recorded for {selected.isoformat()}.",
+                        "success",
+                    )
+                    return redirect(url_for("habit_history", habit_id=habit_id))
+
+                error = (
+                    "The habit changed or this form was already submitted. "
+                    "Review the history before trying again."
+                )
+                status_code = 409
+
+    submission_token = signer.dumps(
+        {
+            "habit_id": habit_id,
+            "user_email": session["user_email"],
+            "submission_id": secrets.token_hex(24),
+        }
+    )
+    start = _habit_start(habit)
+
+    return render_template(
+        "apps/habit_tracker/record_completion.html",
+        habit=habit,
+        habit_id=habit_id,
+        today=today.isoformat(),
+        earliest_date=start.isoformat() if start else None,
+        selected_date=selected_value,
+        error=error,
+        habit_csrf_token=_habit_form_token(),
+        submission_token=submission_token,
+    ), status_code
 
 @app.route("/habits/<habit_id>/complete", methods=["POST"])
 def complete_habit(habit_id):
