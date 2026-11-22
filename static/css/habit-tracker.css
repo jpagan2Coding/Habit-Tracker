@@ -28,6 +28,91 @@
     outline-offset: 3px;
 }
 
+/* Habit action dropdown */
+.habit-action-menu {
+    position: relative;
+}
+
+.habit-action-dropdown {
+    position: absolute;
+    right: 0;
+    z-index: 100;
+    width: 210px;
+    box-sizing: border-box;
+    padding: 6px;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+}
+
+.habit-action-menu:not(.habit-table-menu) .habit-action-dropdown {
+    top: calc(100% + 8px);
+}
+
+.habit-table-menu .habit-action-dropdown {
+    bottom: calc(100% + 8px);
+}
+
+.habit-action-dropdown[hidden] {
+    display: none;
+}
+
+.habit-action-dropdown form {
+    margin: 0;
+    width: 100%;
+}
+
+.habit-action-menu-item {
+    display: flex;
+    width: 100%;
+    min-height: 40px;
+    box-sizing: border-box;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    padding: 9px 10px;
+    color: #334155;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.habit-action-menu-item:hover,
+.habit-action-menu-item:focus-visible {
+    background: #f1f5f9;
+    outline: none;
+}
+
+.habit-action-menu-item-danger,
+.habit-action-menu-item-danger .menu-item-icon {
+    color: #dc2626;
+}
+
+.habit-action-menu-item-danger:hover,
+.habit-action-menu-item-danger:focus-visible {
+    background: #fef2f2;
+}
+
+.habit-action-menu-item-success,
+.habit-action-menu-item-success .menu-item-icon {
+    color: #047857;
+}
+
+.menu-item-icon {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
+    color: #64748b;
+}
+
 /* Habits on a break are greyed out; the status and action cells stay full strength. */
 .habit-paused {
     background: #f8fafc;
@@ -41,7 +126,15 @@
 
 .dashboard-shell {
     margin: -2rem -1rem;
-    background: #f5f7fb;
+    background: #f7f6f2;
+    min-height: calc(100vh - 64px);
+}
+
+.dashboard-shell > aside {
+    min-height: calc(100vh - 64px);
+    position: sticky;
+    top: 64px;
+    align-self: flex-start;
 }
 
 .dashboard-content-scroll {
@@ -52,11 +145,98 @@
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+#keyboard-shortcuts-details summary::-webkit-details-marker {
+    display: none;
+}
+
+#keyboard-shortcuts-details[open] summary svg {
+    transform: rotate(180deg);
+}
+
 .summary-card,
 .habit-row,
 .habit-table-card,
 .progress-card {
-    box-shadow: 0 2px 7px rgba(15, 23, 42, 0.08);
+    border-color: #e7e5df !important;
+    background: #fffefa;
+    box-shadow: 0 6px 18px rgba(51, 65, 85, 0.055);
+}
+
+.habit-progress-ring {
+    --progress-value: 0deg;
+    display: inline-grid;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 9999px;
+    background: conic-gradient(#059669 var(--progress-value), #e7e5df 0);
+}
+
+.habit-progress-ring {
+    width: 3.25rem;
+    height: 3.25rem;
+}
+
+.habit-progress-ring::before {
+    content: "";
+    grid-area: 1 / 1;
+    border-radius: 9999px;
+    background: #fffefa;
+}
+
+.habit-progress-ring::before {
+    width: 2.45rem;
+    height: 2.45rem;
+}
+
+.habit-progress-ring span {
+    position: relative;
+    z-index: 1;
+    grid-area: 1 / 1;
+    color: #0f172a;
+    font-weight: 800;
+}
+
+.habit-progress-ring span {
+    font-size: 0.68rem;
+}
+
+.dashboard-shell aside {
+    background: #111827;
+    border-right-color: #1f2937;
+}
+
+.dashboard-shell aside .sidebar-link {
+    color: #cbd5e1;
+}
+
+.dashboard-shell aside .sidebar-link:hover {
+    background: #1f2937;
+    color: #ffffff;
+}
+
+.dashboard-shell aside .sidebar-link.bg-indigo-50 {
+    background: #1e3a5f;
+    color: #ffffff;
+}
+
+.dashboard-shell aside .text-red-600,
+.dashboard-shell aside .text-red-700 {
+    color: #fda4af;
+}
+
+.dashboard-shell aside .hover\:bg-red-50:hover {
+    background: rgba(127, 29, 29, 0.35);
+    color: #fecdd3;
+}
+
+.bg-blue-950,
+.bg-indigo-600 {
+    background-color: #172554 !important;
+}
+
+.hover\:bg-blue-900:hover,
+.hover\:bg-indigo-700:hover {
+    background-color: #1e3a8a !important;
 }
 
 @media (min-width: 640px) {

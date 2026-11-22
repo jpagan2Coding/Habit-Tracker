@@ -1,6 +1,11 @@
 from datetime import datetime, timezone
 
-from reminders import _vapid_private_key, reminder_due, validate_reminder_settings
+from reminders import (
+    _vapid_private_key,
+    reminder_due,
+    send_due_reminders,
+    validate_reminder_settings,
+)
 
 
 def test_daily_reminder_is_due_at_local_time():
@@ -110,6 +115,74 @@ def test_reminders_skip_completed_goals_and_weekly_same_day_logs():
     now = datetime(2026, 11, 3, 9, 30, tzinfo=timezone.utc)
     assert reminder_due(daily, now) is None
     assert reminder_due(weekly, now) is None
+
+
+def test_daily_reminder_stays_due_after_scheduled_time():
+    habit = {
+        "frequency": "daily",
+        "target": 1,
+        "reminder_enabled": True,
+        "reminder_time": "09:30",
+        "reminder_timezone": "UTC",
+        "created_at": datetime(2026, 10, 1),
+    }
+
+    before = datetime(2026, 11, 3, 9, 29, tzinfo=timezone.utc)
+    due = datetime(2026, 11, 3, 9, 30, tzinfo=timezone.utc)
+    later = datetime(2026, 11, 3, 18, 45, tzinfo=timezone.utc)
+
+    assert reminder_due(habit, before) is None
+    assert reminder_due(habit, due) == "2026-11-03:09:30"
+    assert reminder_due(habit, later) == "2026-11-03:09:30"
+
+
+def test_reminder_does_not_run_before_configured_local_time():
+    habit = {
+        "frequency": "daily",
+        "target": 1,
+        "reminder_enabled": True,
+        "reminder_time": "01:15",
+        "reminder_timezone": "UTC",
+        "created_at": datetime(2026, 10, 1),
+    }
+
+    one_minute_before = datetime(2026, 11, 3, 1, 14, tzinfo=timezone.utc)
+    exactly_on_time = datetime(2026, 11, 3, 1, 15, tzinfo=timezone.utc)
+    after_time = datetime(2026, 11, 3, 1, 16, tzinfo=timezone.utc)
+
+    assert reminder_due(habit, one_minute_before) is None
+    assert reminder_due(habit, exactly_on_time) == "2026-11-03:01:15"
+    assert reminder_due(habit, after_time) == "2026-11-03:01:15"
+
+
+def test_marked_read_reminder_is_not_recreated(client, mongo_client):
+    database = mongo_client["Habit-Tracker_test"]
+    habit_id = database["habits"].insert_one(
+        {
+            "name": "Read",
+            "frequency": "daily",
+            "target": 1,
+            "created_at": datetime(2026, 10, 1),
+            "user_email": "person@example.com",
+            "reminder_enabled": True,
+            "reminder_time": "09:30",
+            "reminder_timezone": "UTC",
+            "completed_dates": [],
+        }
+    ).inserted_id
+    now = datetime(2026, 11, 3, 9, 30, tzinfo=timezone.utc)
+    send_due_reminders(database, now)
+    notification = database["notifications"].find_one({"habit_id": habit_id})
+    database["notifications"].update_one(
+        {"_id": notification["_id"]},
+        {"$set": {"read_at": datetime.utcnow()}},
+    )
+
+    send_due_reminders(database, now)
+    send_due_reminders(database, now)
+
+    assert database["notifications"].count_documents({"habit_id": habit_id}) == 1
+    assert database["notifications"].find_one({"habit_id": habit_id}).get("read_at") is not None
 
 
 def test_invalid_reminder_settings_are_rejected_but_disabled_settings_are_empty():

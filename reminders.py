@@ -165,7 +165,14 @@ def reminder_due(habit, now_utc=None):
         return None
     now_utc = now_utc or datetime.now(timezone.utc)
     local_now = now_utc.astimezone(_timezone(habit.get("reminder_timezone")))
-    if habit.get("reminder_time") != local_now.strftime("%H:%M"):
+    try:
+        reminder_time = datetime.strptime(habit.get("reminder_time", ""), "%H:%M").time()
+    except (TypeError, ValueError):
+        return None
+
+    reminder_datetime = datetime.combine(local_now.date(), reminder_time)
+    reminder_datetime = reminder_datetime.replace(tzinfo=local_now.tzinfo)
+    if local_now < reminder_datetime:
         return None
 
     occurrence_date = local_now.date()
@@ -224,6 +231,8 @@ def send_due_reminders(database, now_utc=None):
             "message": f"Reminder: {habit['name']} is scheduled now.",
             "url": "/dashboard",
             "occurrence_key": occurrence_key,
+            "reminder_date": occurrence_key.split(":", 1)[0],
+            "reminder_time": habit.get("reminder_time"),
             "created_at": datetime.utcnow(),
         }
         try:
@@ -259,7 +268,7 @@ def send_due_reminders(database, now_utc=None):
                 vapid_private_key=private_key,
                 vapid_claims={"sub": subject},
             )
-        except WebPushException as error:
+        except (WebPushException, OSError, TypeError, ValueError) as error:
             deliveries.delete_one({"delivery_key": delivery_key})
             print(f"Push delivery failed for {habit.get('user_email')}: {error}")
             continue

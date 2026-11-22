@@ -14,89 +14,11 @@
 
 
     <!-- Sidebar -->
-    <aside class="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
-
-
-        <nav class="flex-1 px-4 py-7">
-            <a
-                href="{{ url_for('habit_dashboard') }}"
-                class="sidebar-link mb-2 flex items-center gap-3 rounded-lg bg-indigo-50 px-4 py-3 font-semibold text-indigo-700"
-            >
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M3 13h2l2-6 4 12 3-8 2 2h5"></path>
-                </svg>
-                Dashboard
-            </a>
-
-
-            <a href="{{ url_for('habit_tracker') }}"
-                class="sidebar-link mb-2 flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                My Habits
-            </a>
-
-
-            <a href="{{ url_for('summary') }}"
-                class="sidebar-link mb-2 flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M3 3v18h18M7 15l3-3 3 2 4-5"></path>
-                </svg>
-                Summary
-            </a>
-        </nav>
-
-
-        <div class="border-t border-slate-200 p-4">
-            <a id="shortcut-settings"
-            href="{{ url_for('settings') }}"
-                class="sidebar-link mb-2 flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z"></path>
-                </svg>
-                Settings
-            </a>
-
-            <a href="{{ url_for('delete_account_data') }}"
-                class="sidebar-link mb-2 flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-red-600 hover:bg-red-50">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                </svg>
-                Delete My Data
-            </a>
-
-            <a href="{{ url_for('delete_account') }}"
-                class="sidebar-link flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-red-700 hover:bg-red-50">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M6 7h12l-1 12a2 2 0 01-2 2H9a2 2 0 01-2-2L6 7zm3-3h6a2 2 0 012 2v2H7V6a2 2 0 012-2z"></path>
-                </svg>
-                Delete Account
-            </a>
-
-        </div>
-    </aside>
+    {% include 'apps/habit_tracker/_sidebar.html' %}
 
 
     <!-- Main Dashboard Area -->
     <div class="min-w-0 flex-1">
-        <form action="{{ url_for('import_habit') }}" method="post" enctype="multipart/form-data"
-            class="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
-            <label for="habit-file" class="font-medium text-slate-700">Import habit</label>
-            <input id="habit-file" name="file" type="file" accept=".habit" required
-                class="text-sm text-slate-600">
-            <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700">
-                Import
-            </button>
-        </form>
-
-
         <!-- Top header -->
         <header class="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
             <h1 class="text-xl font-bold text-slate-900">
@@ -104,74 +26,6 @@
             </h1>
 
 
-            <div class="flex items-center gap-3">
-                <div class="relative">
-                    <button type="button" id="notification-bell"
-                            class="relative rounded-lg p-2 text-slate-600 hover:bg-slate-100"
-                            aria-label="Notifications" aria-expanded="false"
-                            aria-controls="notification-dropdown">
-                        <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                  d="M15 17h5l-1.5-2v-4a6.5 6.5 0 00-13 0v4L4 17h5m6 0a3 3 0 01-6 0"></path>
-                        </svg>
-                        <span id="notification-count"
-                              class="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-950 px-1 text-xs font-bold text-white {% if not unread_notification_count %}hidden{% endif %}"
-                              aria-label="{{ unread_notification_count }} unread notifications">
-                            {{ unread_notification_count }}
-                        </span>
-                    </button>
-                    <div id="notification-dropdown"
-                         class="absolute right-0 z-10 mt-2 hidden w-80 rounded-xl border border-slate-200 bg-white p-3 shadow-lg"
-                         role="region" aria-label="Recent notifications">
-                        <div class="mb-2 flex items-center justify-between">
-                            <h2 class="font-semibold text-slate-900">Notifications</h2>
-                            {% if notifications %}
-                            <button type="button" id="mark-all-notifications"
-                                    class="text-xs font-medium text-indigo-700 hover:text-indigo-900">
-                                Mark all read
-                            </button>
-                            {% endif %}
-                        </div>
-                        <div id="notification-list" class="max-h-80 space-y-2 overflow-y-auto">
-                            {% if notifications %}
-                            {% for notification in notifications %}
-                            <div class="notification-item rounded-lg p-2 {% if not notification.read_at %}bg-indigo-50{% endif %}"
-                                 data-notification-id="{{ notification._id }}"
-                                 data-habit-id="{{ notification.habit_id }}">
-                                <div class="block text-left {% if not notification.read_at %}font-semibold{% endif %}">
-                                    <span class="block text-sm text-slate-700">{{ notification.habit_name }}</span>
-                                    <span class="block text-xs text-slate-500">{{ notification.message }}</span>
-                                    <time class="mt-1 block text-xs text-slate-400"
-                                          datetime="{{ notification.created_at.isoformat() }}">
-                                        {{ notification.created_at.strftime("%Y-%m-%d %H:%M") }}
-                                    </time>
-                                </div>
-                                {% if not notification.read_at %}
-                                <button type="button" data-mark-notification-read
-                                        class="mt-1 text-xs font-medium text-indigo-700 hover:text-indigo-900">
-                                    Mark read
-                                </button>
-                                {% endif %}
-                            </div>
-                            {% endfor %}
-                            {% else %}
-                            <p class="py-4 text-center text-sm text-slate-500">
-                                No notifications yet.
-                            </p>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-                <span
-                    class="hidden h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-700 sm:flex">
-                    U
-                </span>
-
-
-                <span class="hidden font-semibold text-slate-700 sm:block">
-                    User
-                </span>
-            </div>
         </header>
 
 
@@ -198,7 +52,7 @@
 
                <a id="shortcut-new-habit"
                 href="{{ url_for('habit_tracker') }}"
-                    class="inline-flex w-fit items-center gap-2 rounded-lg bg-blue-950 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-blue-900">
+                    class="inline-flex w-fit items-center gap-2 rounded-lg bg-emerald-600 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-emerald-700">
                     <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                     </svg>
@@ -206,39 +60,49 @@
                 </a>
             </section>
 
-<section class="mb-6 rounded-xl border border-slate-200 bg-white p-5"
+
+
+<section class="mb-6 rounded-xl border border-slate-200 bg-white"
          aria-labelledby="keyboard-shortcuts-heading">
+    <details id="keyboard-shortcuts-details">
+        <summary id="keyboard-shortcuts-heading"
+                 class="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 text-lg font-semibold text-slate-900">
+            <span>Keyboard Shortcuts</span>
+            <svg class="h-5 w-5 shrink-0 text-slate-500 transition-transform"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M19 9l-7 7-7-7"></path>
+            </svg>
+        </summary>
 
-    <h2 id="keyboard-shortcuts-heading"
-        class="text-lg font-semibold text-slate-900">
-        Keyboard Shortcuts
-    </h2>
+        <div class="border-t border-slate-200 px-5 py-4">
+            <p class="text-sm text-slate-600">
+                On the Dashboard, press g, release it, then press the second key
+                within one second. Shortcuts do not run while you are typing.
+            </p>
 
-    <p class="mt-1 text-sm text-slate-600">
-        On the Dashboard, press g, release it, then press the second key
-        within one second. Shortcuts do not run while you are typing.
-    </p>
+            <ul class="mt-3 space-y-1 text-sm text-slate-700">
+                <li><kbd>g</kbd> then <kbd>n</kbd> — Add New Habit</li>
+                <li><kbd>g</kbd> then <kbd>s</kbd> — Open Settings</li>
+                <li><kbd>g</kbd> then <kbd>b</kbd> — Toggle Notifications</li>
+            </ul>
 
-    <ul class="mt-3 space-y-1 text-sm text-slate-700">
-        <li><kbd>g</kbd> then <kbd>n</kbd> — Add New Habit</li>
-        <li><kbd>g</kbd> then <kbd>s</kbd> — Open Settings</li>
-        <li><kbd>g</kbd> then <kbd>b</kbd> — Toggle Notifications</li>
-    </ul>
+            <label class="mt-4 inline-flex items-center gap-2 text-sm text-slate-700">
+                <input id="keyboard-shortcuts-enabled"
+                       type="checkbox"
+                       checked
+                       class="h-4 w-4 rounded border-slate-300">
+                Enable keyboard shortcuts
+            </label>
 
-    <label class="mt-4 inline-flex items-center gap-2 text-sm text-slate-700">
-        <input id="keyboard-shortcuts-enabled"
-               type="checkbox"
-               checked
-               class="h-4 w-4 rounded border-slate-300">
-        Enable keyboard shortcuts
-    </label>
-
-    <p id="keyboard-shortcut-status"
-       role="status"
-       aria-live="polite"
-       class="mt-3 text-sm font-medium text-indigo-700">
-        Keyboard shortcuts enabled.
-    </p>
+            <p id="keyboard-shortcut-status"
+               role="status"
+               aria-live="polite"
+               class="mt-3 text-sm font-medium text-indigo-700">
+                Keyboard shortcuts enabled.
+            </p>
+        </div>
+    </details>
 </section>
 
             <!-- Summary cards -->
@@ -463,6 +327,11 @@
                             </div>
 
                             <div class="mt-3 flex items-center gap-3">
+                                <div class="habit-progress-ring"
+                                     data-progress="{{ habit_progress.percentage }}"
+                                     aria-label="{{ habit.name }} progress">
+                                    <span>{{ habit_progress.percentage }}%</span>
+                                </div>
                                 <div class="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
                                     <div
                                         class="habit-progress-fill h-full bg-emerald-500"
@@ -504,54 +373,73 @@
 
                                 {% endif %}
 
-                                {% if today_count_by_id[habit.id] > 0 %}
-
-                                <form class="complete-habit-form"
-                                    action="{{ url_for('uncomplete_habit', habit_id=habit.id) }}"
-                                    method="POST">
-
-                                    <input type="hidden"
-                                        name="csrf_token"
-                                        value="{{ habit_csrf_token }}">
-
-                                    <button type="submit"
-                                            class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
-                                        Undo
+                                <div class="habit-action-menu" data-habit-action-menu>
+                                    <button type="button"
+                                            class="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                                            aria-label="More options for {{ habit.name }}"
+                                            aria-expanded="false"
+                                            data-habit-action-toggle>
+                                        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                            <circle cx="4" cy="10" r="1.5"></circle>
+                                            <circle cx="10" cy="10" r="1.5"></circle>
+                                            <circle cx="16" cy="10" r="1.5"></circle>
+                                        </svg>
                                     </button>
-                                </form>
-                                {% endif %}
-                                {% if is_skipped %}
-                                <form method="POST" action="{{ url_for('unskip_habit', habit_id=habit.id) }}">
-                                    <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
-                                    <button type="submit"
-                                            class="rounded-lg border border-amber-200 px-3 py-2 text-sm font-medium text-amber-700 hover:bg-amber-50">
-                                        Undo skip
-                                    </button>
-                                </form>
-                                {% elif not is_completed %}
-                                <form method="POST" action="{{ url_for('skip_habit', habit_id=habit.id) }}">
-                                    <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
-                                    <button type="submit"
-                                            class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
-                                        Skip
-                                    </button>
-                                </form>
-                                {% endif %}
-                                {% if not is_on_break %}
-                                {% include 'apps/habit_tracker/_pause_button.html' %}
-                                {% endif %}
-                                {% include 'apps/habit_tracker/_export_button.html' %}
-                                <a href="{{ url_for('habit_history', habit_id=habit.id) }}" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
-                                    History
-                                </a>
-                                <a href="{{ url_for('edit_habit', habit_id=habit.id) }}"
-                                   class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
-                                    Edit
-                                </a>
-                                <a href="{{ url_for('delete_habit', habit_id=habit.id) }}"
-                                   class="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
-                                    Delete
-                                </a>
+                                    <div class="habit-action-dropdown"
+                                         role="menu"
+                                         hidden
+                                         data-habit-action-dropdown>
+                                        {% if today_count_by_id[habit.id] > 0 %}
+                                        <form class="complete-habit-form" action="{{ url_for('uncomplete_habit', habit_id=habit.id) }}" method="POST">
+                                            <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
+                                            <button type="submit" class="habit-action-menu-item" role="menuitem">
+                                                <svg class="menu-item-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l-4-4 4-4m-4 4h10a5 5 0 010 10h-2"></path></svg>
+                                                Undo
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                        {% if is_skipped %}
+                                        <form method="POST" action="{{ url_for('unskip_habit', habit_id=habit.id) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
+                                            <button type="submit" class="habit-action-menu-item" role="menuitem">
+                                                <svg class="menu-item-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l-4-4 4-4m-4 4h10a5 5 0 010 10h-2"></path></svg>
+                                                Undo skip
+                                            </button>
+                                        </form>
+                                        {% elif not is_completed %}
+                                        <form method="POST" action="{{ url_for('skip_habit', habit_id=habit.id) }}">
+                                            <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
+                                            <button type="submit" class="habit-action-menu-item" role="menuitem">
+                                                <svg class="menu-item-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M4 5v14"></path></svg>
+                                                Skip
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                        {% if not is_on_break %}
+                                        <a href="{{ url_for('pause_habit', habit_id=habit.id) }}" class="habit-action-menu-item" role="menuitem">
+                                            <svg class="menu-item-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5v14m8-14v14"></path></svg>
+                                            Pause
+                                        </a>
+                                        {% endif %}
+                                        <a href="{{ url_for('export_habit', habit_id=habit.id) }}" class="habit-action-menu-item" role="menuitem">
+                                            <svg class="menu-item-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m-4-4l4 4 4-4M5 16v4h14v-4"></path></svg>
+                                            Export
+                                        </a>
+                                        <a href="{{ url_for('habit_history', habit_id=habit.id) }}" class="habit-action-menu-item" role="menuitem">
+                                            <svg class="menu-item-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 2m6-2a9 9 0 11-3-6.7M21 3v6h-6"></path></svg>
+                                            History
+                                        </a>
+                                        <div class="my-1 border-t border-slate-100"></div>
+                                        <a href="{{ url_for('edit_habit', habit_id=habit.id) }}" class="habit-action-menu-item" role="menuitem">
+                                            <svg class="menu-item-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M16 3l5 5M10 14l10-10"></path></svg>
+                                            Edit
+                                        </a>
+                                        <a href="{{ url_for('delete_habit', habit_id=habit.id) }}" class="habit-action-menu-item habit-action-menu-item-danger" role="menuitem">
+                                            <svg class="menu-item-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M8 6V4h8v2m-9 0l1 14h8l1-14M10 10v6m4-6v6"></path></svg>
+                                            Delete
+                                        </a>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </article>
@@ -568,19 +456,20 @@
                 </div>
                 {% else %}
                 <div class="rounded-xl border-2 border-dashed border-slate-300 bg-white px-6 py-10 text-center">
-                    <div
-                        class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-indigo-50 text-3xl">
-                        🌱
+                    <div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
+                        <svg class="h-8 w-8 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M12 6v6l4 2m5-2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
                     </div>
 
 
-                    <h3 class="text-xl font-bold text-slate-900">
-                        No habits yet
-                    </h3>
+                    <p class="text-sm font-semibold uppercase tracking-wide text-emerald-700">Start your first streak</p>
+                    <h3 class="mt-1 text-xl font-bold text-slate-900">No habits yet</h3>
 
 
                     <p class="mx-auto mt-2 max-w-md text-slate-500">
-                        Create your first habit to start building a consistent daily routine.
+                        Choose something small and repeatable. You can set a target, schedule, and reminder after it is created.
                     </p>
 
 
@@ -606,6 +495,17 @@
                     </p>
                 </div>
 
+                <form action="{{ url_for('import_habit') }}" method="post" enctype="multipart/form-data"
+                      class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+                    <label for="habit-file" class="font-medium text-slate-700">Import habit</label>
+                    <input id="habit-file" name="file" type="file" accept=".habit" required
+                           class="text-sm text-slate-600">
+                    <button type="submit"
+                            class="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-700">
+                        Import
+                    </button>
+                </form>
+
                 <form id="bulk-delete-form"
       method="POST"
       action="{{ url_for('delete_selected_habits') }}"
@@ -630,7 +530,7 @@
     </p>
 </form>
 
-                <div class="habit-table-card overflow-x-auto rounded-xl border border-slate-200 bg-white">
+                <div class="habit-table-card overflow-visible rounded-xl border border-slate-200 bg-white">
                     <table class="min-w-full divide-y divide-slate-200">
                         <thead class="bg-slate-50">
                             <tr>
@@ -757,39 +657,60 @@
 
                                 <td class="px-5 py-4 text-right">
                                     <div class="flex flex-wrap items-center justify-end gap-2">
-                                        {% if resume_date %}
-                                        <form method="POST" action="{{ url_for('resume_habit', habit_id=habit.id) }}">
-                                            <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
-                                            <button type="submit"
-                                                    class="rounded-lg border border-emerald-200 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50">
-                                                End break
+                                        <div class="habit-action-menu habit-table-menu" data-habit-action-menu>
+                                            <button type="button"
+                                                    class="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                                                    aria-label="More options for {{ habit.name }}"
+                                                    aria-expanded="false"
+                                                    data-habit-action-toggle>
+                                                <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                                                    <circle cx="4" cy="10" r="1.5"></circle>
+                                                    <circle cx="10" cy="10" r="1.5"></circle>
+                                                    <circle cx="16" cy="10" r="1.5"></circle>
+                                                </svg>
                                             </button>
-                                        </form>
-                                        {% else %}
-                                        {% include 'apps/habit_tracker/_pause_button.html' %}
-                                        {% endif %}
-                                        {% include 'apps/habit_tracker/_export_button.html' %}
-                                        <a href="{{ url_for('habit_history', habit_id=habit.id) }}" class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
-                                            History
-                                        </a>
-                                        <a href="{{ url_for('edit_habit', habit_id=habit.id) }}"
-                                           class="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50">
-                                            Edit
-                                        </a>
-
-
-                                        <form method="POST"
-      action="{{ url_for('delete_habit', habit_id=habit.id) }}"
-      onsubmit="return window.confirm('Delete this habit? This cannot be undone.');">
-    <input type="hidden"
-           name="csrf_token"
-           value="{{ habit_csrf_token }}">
-
-    <button type="submit"
-            class="rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
-        Delete
-    </button>
-</form>
+                                            <div class="habit-action-dropdown"
+                                                 role="menu"
+                                                 hidden
+                                                 data-habit-action-dropdown>
+                                                {% if resume_date %}
+                                                <form method="POST" action="{{ url_for('resume_habit', habit_id=habit.id) }}">
+                                                    <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
+                                                    <button type="submit" class="habit-action-menu-item habit-action-menu-item-success" role="menuitem">
+                                                        <svg class="menu-item-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5l11 7-11 7V5z"></path></svg>
+                                                        End break
+                                                    </button>
+                                                </form>
+                                                {% else %}
+                                                <a href="{{ url_for('pause_habit', habit_id=habit.id) }}" class="habit-action-menu-item" role="menuitem">
+                                                    <svg class="menu-item-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5v14m8-14v14"></path></svg>
+                                                    Pause
+                                                </a>
+                                                {% endif %}
+                                                <a href="{{ url_for('export_habit', habit_id=habit.id) }}" class="habit-action-menu-item" role="menuitem">
+                                                    <svg class="menu-item-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v12m-4-4l4 4 4-4M5 16v4h14v-4"></path></svg>
+                                                    Export
+                                                </a>
+                                                <a href="{{ url_for('habit_history', habit_id=habit.id) }}" class="habit-action-menu-item" role="menuitem">
+                                                    <svg class="menu-item-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 2m6-2a9 9 0 11-3-6.7M21 3v6h-6"></path></svg>
+                                                    History
+                                                </a>
+                                                <div class="my-1 border-t border-slate-100"></div>
+                                                <a href="{{ url_for('edit_habit', habit_id=habit.id) }}" class="habit-action-menu-item" role="menuitem">
+                                                    <svg class="menu-item-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M16 3l5 5M10 14l10-10"></path></svg>
+                                                    Edit
+                                                </a>
+                                                <form method="POST"
+                                                      action="{{ url_for('delete_habit', habit_id=habit.id) }}"
+                                                      onsubmit="return window.confirm('Delete this habit? This cannot be undone.');">
+                                                    <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
+                                                    <button type="submit" class="habit-action-menu-item habit-action-menu-item-danger" role="menuitem">
+                                                        <svg class="menu-item-icon" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6h18M8 6V4h8v2m-9 0l1 14h8l1-14M10 10v6m4-6v6"></path></svg>
+                                                        Delete
+                                                    </button>
+                                                </form>
+                                            </div>
+                                        </div>
                                     </div>
                                 </td>
                             </tr>
@@ -812,6 +733,14 @@
 document.querySelectorAll(".habit-progress-fill").forEach(progressFill => {
     const percentage = Number.parseFloat(progressFill.dataset.progress);
     progressFill.style.width = `${Number.isFinite(percentage) ? percentage : 0}%`;
+});
+
+document.querySelectorAll(".habit-progress-ring").forEach(progressRing => {
+    const percentage = Number.parseFloat(progressRing.dataset.progress);
+    const safePercentage = Number.isFinite(percentage)
+        ? Math.max(0, Math.min(100, percentage))
+        : 0;
+    progressRing.style.setProperty("--progress-value", `${safePercentage * 3.6}deg`);
 });
 
 document.querySelectorAll(".complete-habit-form").forEach(form => {
@@ -846,11 +775,6 @@ document.querySelectorAll(".complete-habit-form").forEach(form => {
 {% endblock %}
 
 {% block scripts %}
-<script>
-    window.habitNotificationConfig = {
-        csrfToken: JSON.parse('{{ habit_csrf_token|tojson }}')
-    };
-</script>
-<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
 <script src="{{ url_for('static', filename='js/habit-bulk-delete.js') }}"></script>
+<script src="{{ url_for('static', filename='js/habit-action-menu.js') }}"></script>
 {% endblock %}

@@ -6,16 +6,33 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/habit-tracker.css') }}">
 {% endblock %}
 
-{% block content %}
-<div class="mx-auto max-w-2xl">
-    <a href="{{ url_for('habit_dashboard') }}"
-       class="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900">
-        ← Back to Dashboard
-    </a>
+{% block messages %}{% endblock %}
 
-    <section class="rounded-xl border border-slate-200 bg-white p-6 sm:p-8">
-        <h1 class="text-2xl font-bold text-slate-900">Settings</h1>
-        <p class="mt-1 text-sm text-slate-500">Manage your account and display preferences.</p>
+{% block content %}
+<div class="dashboard-shell flex">
+    {% include 'apps/habit_tracker/_sidebar.html' %}
+
+    <div class="min-w-0 flex-1">
+        <header class="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
+            <h1 class="text-xl font-bold text-slate-900">Settings</h1>
+        </header>
+
+        <main class="dashboard-content-scroll p-5 sm:p-8">
+            <div class="mx-auto max-w-2xl">
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                <div class="mb-5 space-y-2" role="alert">
+                    {% for category, message in messages %}
+                    <div class="rounded-lg border px-4 py-3 text-sm {% if category == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-green-200 bg-green-50 text-green-700{% endif %}">
+                        {{ message }}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endwith %}
+
+    <section class="rounded-xl border border-slate-200 bg-[#fffefa] p-6 sm:p-8 shadow-[0_6px_18px_rgba(51,65,85,0.055)]">
+        <p class="text-sm text-slate-500">Manage your account and display preferences.</p>
 
         <form method="POST" action="{{ url_for('settings') }}" class="mt-6">
             <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
@@ -125,6 +142,10 @@
         </section>
         {% endif %}
     </section>
+</div>
+            </div>
+        </main>
+    </div>
 </div>
 {% endblock %}
 

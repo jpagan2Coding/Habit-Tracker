@@ -473,8 +473,15 @@ def _resume_date(habit, today):
 @app.route("/dashboard")
 @login_required
 def habit_dashboard():
+    db = get_db()
+    try:
+        from reminders import send_due_reminders
+        send_due_reminders(db)
+    except (OSError, PyMongoError, RuntimeError) as e:
+        app.logger.warning(f"Could not run due reminder check: {e}")
+
     habits = list(
-        get_db()["habits"].find({"user_email": session.get("user_email")}).sort("created_at", -1)
+        db["habits"].find({"user_email": session.get("user_email")}).sort("created_at", -1)
     )
     for habit in habits:
         habit["id"] = str(habit["_id"])
@@ -535,7 +542,6 @@ def habit_dashboard():
     # Skipped habits are neutral: they drop out of today's progress instead of lowering it
     total_habits = len(habits)
     scheduled_today = len(todays_habits) - skipped_today
-
     completion_percentage = (
         round((completed_today / scheduled_today) * 100) if scheduled_today else 0
     )
@@ -544,12 +550,12 @@ def habit_dashboard():
     if session.get("user_email"):
         notifications_collection = get_db()["notifications"]
         notifications = list(
-            notifications_collection.find({"user_email": session["user_email"]})
-            .sort("created_at", -1)
-            .limit(10)
+        notifications_collection.find({"user_email": session["user_email"]})
+        .sort("created_at", -1)
+        .limit(10)
         )
         unread_notification_count = notifications_collection.count_documents(
-            {"user_email": session["user_email"], "read_at": {"$exists": False}}
+        {"user_email": session["user_email"], "read_at": {"$exists": False}}
         )
     reminded_habit_ids = {
         str(notification["habit_id"])
@@ -557,11 +563,13 @@ def habit_dashboard():
         if (
             not notification.get("read_at")
             and notification.get("habit_id")
+            and str(notification.get("occurrence_key", "")).startswith(f"{today}:")
             and not any(
                 habit["id"] == str(notification["habit_id"])
                 and (
                     today in habit.get("completed_dates", [])
                     or today in habit.get("skipped_dates", [])
+                    or _resume_date(habit, today_date)
                 )
                 for habit in habits
             )
@@ -757,6 +765,38 @@ def current_text_size():
 def inject_text_size():
     # makes text_size available on every page so <html> can use it
     return {"text_size": current_text_size()}
+
+
+@app.context_processor
+def inject_notifications():
+    """Make the shared header bell and notification count available everywhere."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return {
+            "notifications": [],
+            "unread_notification_count": 0,
+            "habit_csrf_token": "",
+        }
+
+    notifications = []
+    unread_notification_count = 0
+    try:
+        notifications_collection = get_db()["notifications"]
+        notifications = list(
+            notifications_collection.find({"user_email": session["user_email"]})
+            .sort("created_at", -1)
+            .limit(10)
+        )
+        unread_notification_count = notifications_collection.count_documents(
+            {"user_email": session["user_email"], "read_at": {"$exists": False}}
+        )
+    except (OSError, PyMongoError, RuntimeError) as e:
+        app.logger.warning(f"Could not load header notifications: {e}")
+
+    return {
+        "notifications": notifications,
+        "unread_notification_count": unread_notification_count,
+        "habit_csrf_token": _habit_form_token(),
+    }
 
 
 @app.route("/settings", methods=["GET", "POST"])
@@ -1135,14 +1175,40 @@ def _owned_notification(notification_id):
     return _owned_document("notifications", notification_id)
 
 
+def _clear_habit_reminders(habit_id):
+    """Mark every pending reminder for a habit as read."""
+    if habit_id is None:
+        return 0
+    result = get_db()["notifications"].update_many(
+        {
+            "user_email": session["user_email"],
+            "habit_id": habit_id,
+            "read_at": {"$exists": False},
+        },
+        {"$set": {"read_at": datetime.utcnow()}},
+    )
+    return result.modified_count
+
+
 @app.route("/api/notifications/<notification_id>/read", methods=["POST"])
 def mark_notification_read(notification_id):
     if not session.get("user_id") or not session.get("user_email"):
         return {"error": "Login required."}, 401
     _validate_habit_form_token()
     query, notification = _owned_notification(notification_id)
-    get_db()["notifications"].update_one(query, {"$set": {"read_at": datetime.utcnow()}})
-    return {"ok": True, "url": notification.get("url", url_for("habit_dashboard"))}
+    get_db()["notifications"].update_one(
+        query,
+        {"$set": {"read_at": datetime.utcnow()}},
+    )
+    _clear_habit_reminders(notification.get("habit_id"))
+    unread_count = get_db()["notifications"].count_documents(
+        {"user_email": session["user_email"], "read_at": {"$exists": False}}
+    )
+    return {
+        "ok": True,
+        "url": notification.get("url", url_for("habit_dashboard")),
+        "unread_count": unread_count,
+    }
 
 
 @app.route("/api/notifications/read-all", methods=["POST"])
@@ -1237,6 +1303,7 @@ def complete_habit(habit_id):
     if not _update_completion_count(query, habit, today, new_count):
         return jsonify({"error": "Please retry completion"}), 409
 
+    _clear_habit_reminders(habit["_id"])
     period_completed = progress["completed"] + 1
 
     return jsonify({
@@ -1559,6 +1626,24 @@ def edit_habit(habit_id):
             errors.append(when_missed_error)
 
         if not errors:
+            old_schedule = (
+                bool(habit.get("reminder_enabled", False)),
+                habit.get("reminder_time") or "",
+                habit.get("reminder_timezone") or "UTC",
+                habit.get("frequency") or "",
+                tuple(sorted(habit.get("reminder_weekdays") or [])),
+                str(habit.get("reminder_month_day") or ""),
+            )
+            new_schedule = (
+                form["reminder_enabled"],
+                form["reminder_time"],
+                form["reminder_timezone"],
+                form["frequency"],
+                tuple(sorted(form["reminder_weekdays"])),
+                str(form["reminder_month_day"] or ""),
+            )
+            schedule_changed = old_schedule != new_schedule
+
             result = get_db()["habits"].update_one(
                 query,
                 {
@@ -1579,6 +1664,8 @@ def edit_habit(habit_id):
             )
             if result.matched_count == 0:
                 abort(404)
+            if schedule_changed:
+                _clear_habit_reminders(habit["_id"])
             return redirect(url_for("habit_dashboard"))
 
     return render_template(
@@ -1637,6 +1724,7 @@ def skip_habit(habit_id):
             {**query, "completed_dates": {"$ne": today}},
             {"$addToSet": {"skipped_dates": today}},
         )
+        _clear_habit_reminders(habit["_id"])
     return redirect(url_for("habit_dashboard"))
 
 
@@ -1685,6 +1773,7 @@ def pause_habit(habit_id):
                 query,
                 {"$push": {"breaks": {"start": today.isoformat(), "end": end.isoformat()}}},
             )
+            _clear_habit_reminders(habit["_id"])
             resume = end + timedelta(days=1)
             flash(
                 f"“{habit.get('name', 'This habit')}” is on a break. "
