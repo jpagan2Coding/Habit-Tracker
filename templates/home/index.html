@@ -13,7 +13,18 @@
 <body>
     <div class="container home-frame">
         <header class="home-header row align-items-center">
-            <a class="home-brand col-auto" href="{{ url_for('home') }}">Habit Tracker</a>
+            <a class="habit-brand home-brand col-auto" href="{{ url_for('home') }}" aria-label="Habit Tracker home">
+                <span class="habit-brand-mark" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M7 12.5l3 3L17.5 8" stroke="currentColor" stroke-width="2.4"
+                              stroke-linecap="round" stroke-linejoin="round"></path>
+                    </svg>
+                </span>
+                <span class="habit-brand-copy">
+                    <span class="habit-brand-name">HABIT <strong>TRACKER</strong></span>
+                    <span class="habit-brand-tagline">One habit at a time</span>
+                </span>
+            </a>
 
             <nav class="home-nav col d-none d-md-flex justify-content-center" aria-label="Main navigation">
                 <a href="#home">Home</a><a href="#features">Features</a><a href="#how-it-works">How it works</a><a href="#testimonials">Blog</a><a href="#about">About Us</a>

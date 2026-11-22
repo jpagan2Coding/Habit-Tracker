@@ -36,23 +36,38 @@
             { method: 'POST', headers: { 'X-CSRF-Token': csrfToken } }
         );
         if (!response.ok) throw new Error('Unable to update notification.');
+        const result = await response.json().catch(() => ({}));
         item.classList.remove('bg-indigo-50');
-        clearHabitReminder(item.dataset.habitId);
         const content = item.querySelector('.block.text-left');
         if (content) content.classList.remove('font-semibold');
         const button = item.querySelector('[data-mark-notification-read]');
         if (button) button.remove();
-        updateUnreadCount(-1);
+        clearHabitReminder(item.dataset.habitId);
+        setUnreadCount(Number.isInteger(result.unread_count) ? result.unread_count : 0);
     }
 
     function clearHabitReminder(habitId) {
         if (!habitId) return;
-        const habit = document.querySelector(`[data-habit-id="${habitId}"].reminder-highlight`);
-        if (!habit) return;
-        habit.classList.remove('reminder-highlight', 'border-amber-400', 'bg-amber-50', 'ring-2', 'ring-amber-200');
-        habit.classList.add('border-slate-200', 'bg-white');
-        const badge = habit.querySelector('.reminder-due-badge');
-        if (badge) badge.remove();
+        document.querySelectorAll(
+            `[data-habit-id="${habitId}"].reminder-highlight`
+        ).forEach((habit) => {
+            habit.classList.remove(
+                'reminder-highlight',
+                'border-amber-400',
+                'bg-amber-50',
+                'ring-2',
+                'ring-amber-200'
+            );
+            habit.classList.add('border-slate-200', 'bg-white');
+            const badge = habit.querySelector('.reminder-due-badge');
+            if (badge) badge.remove();
+        });
+    }
+
+    function setUnreadCount(unreadCount) {
+        countBadge.textContent = unreadCount;
+        countBadge.setAttribute('aria-label', `${unreadCount} unread notifications`);
+        countBadge.classList.toggle('hidden', unreadCount === 0);
     }
 
     function updateUnreadCount(change) {
@@ -73,6 +88,7 @@
         });
     });
 
+
     const markAll = document.getElementById('mark-all-notifications');
     if (markAll) {
         markAll.addEventListener('click', async function () {
@@ -85,14 +101,12 @@
                 document.querySelectorAll('[data-mark-notification-read]').forEach(function (button) {
                     const item = button.closest('[data-notification-id]');
                     item.classList.remove('bg-indigo-50');
-                    clearHabitReminder(item.dataset.habitId);
                     const content = item.querySelector('.block.text-left');
                     if (content) content.classList.remove('font-semibold');
                     button.remove();
+                    clearHabitReminder(item.dataset.habitId);
                 });
-                countBadge.textContent = '0';
-                countBadge.setAttribute('aria-label', '0 unread notifications');
-                countBadge.classList.add('hidden');
+                setUnreadCount(0);
                 markAll.remove();
             } catch (error) {
                 console.error(error);

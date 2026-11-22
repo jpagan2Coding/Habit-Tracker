@@ -30,71 +30,7 @@
 
 
     <!-- Sidebar -->
-    <aside class="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:flex lg:flex-col">
-
-
-        <nav class="flex-1 px-4 py-7">
-            <a href="{{ url_for('habit_dashboard') }}"
-                class="sidebar-link mb-2 flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M3 13h2l2-6 4 12 3-8 2 2h5"></path>
-                </svg>
-                Dashboard
-            </a>
-
-
-            <a href="{{ url_for('habit_tracker') }}"
-                class="sidebar-link mb-2 flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                My Habits
-            </a>
-
-
-            <a href="{{ url_for('summary') }}" aria-current="page"
-                class="sidebar-link mb-2 flex items-center gap-3 rounded-lg bg-indigo-50 px-4 py-3 font-semibold text-indigo-700">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M3 3v18h18M7 15l3-3 3 2 4-5"></path>
-                </svg>
-                Summary
-            </a>
-        </nav>
-
-
-        <div class="border-t border-slate-200 p-4">
-            <a href="{{ url_for('settings') }}"
-                class="sidebar-link mb-2 flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z"></path>
-                </svg>
-                Settings
-            </a>
-
-            <a href="{{ url_for('delete_account_data') }}"
-                class="sidebar-link mb-2 flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-red-600 hover:bg-red-50">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                </svg>
-                Delete My Data
-            </a>
-
-            <a href="{{ url_for('delete_account') }}"
-                class="sidebar-link flex items-center gap-3 rounded-lg px-4 py-3 font-medium text-red-700 hover:bg-red-50">
-                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M6 7h12l-1 12a2 2 0 01-2 2H9a2 2 0 01-2-2L6 7zm3-3h6a2 2 0 012 2v2H7V6a2 2 0 012-2z"></path>
-                </svg>
-                Delete Account
-            </a>
-
-        </div>
-    </aside>
+    {% include 'apps/habit_tracker/_sidebar.html' %}
 
 
     <!-- Main Summary Area -->
