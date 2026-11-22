@@ -1,6 +1,6 @@
-from datetime import datetime
-
+from datetime import date, datetime
 import pytest
+from progress import target_on
 
 OWNER_EMAIL = "person@example.com"
 
@@ -417,3 +417,174 @@ def test_bulk_delete_duplicate_ids_count_once(client, habits, owned_habit):
             "success",
             "1 habit deleted successfully.",
         ) in session.get("_flashes", [])
+
+@pytest.fixture
+def daily_edit_day(monkeypatch):
+    today = date(2026, 11, 22)
+    monkeypatch.setattr("app.current_app_date", lambda: today)
+    return today
+
+
+def post_daily_target_edit(client, habit_id, target, **changes):
+    token = form_token(client, habit_id)
+    return client.post(
+        f"/habits/{habit_id}/edit",
+        data={
+            "name": "Morning Walk",
+            "description": "Walk before breakfast",
+            "target": str(target),
+            "frequency": "daily",
+            "reminder_timezone": "UTC",
+            "when_missed": "fail",
+            "csrf_token": token,
+            **changes,
+        },
+    )
+
+
+def add_pending_daily_target(habits, habit_id):
+    habits.update_one(
+        {"_id": habit_id},
+        {
+            "$set": {
+                "target": 2,
+                "initial_target": 1,
+                "target_history": [
+                    {"effective_date": "2026-11-23", "target": 2}
+                ],
+                "goal_suggestion_last_decision": "2026-11-21",
+            }
+        },
+    )
+
+
+def test_daily_edit_form_explains_target_timing(
+    client, habits, owned_habit, daily_edit_day
+):
+    add_pending_daily_target(habits, owned_habit)
+
+    response = client.get(f"/habits/{owned_habit}/edit")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Today's target: 1." in html
+    assert "Changes to this daily target start tomorrow." in html
+    assert 'value="2"' in html
+
+
+def test_daily_target_edit_persists_tomorrow_change(
+    client, habits, owned_habit, daily_edit_day
+):
+    original = habits.find_one({"_id": owned_habit})
+
+    response = post_daily_target_edit(client, owned_habit, 2)
+
+    assert response.status_code == 302
+    saved = habits.find_one({"_id": owned_habit})
+
+    assert saved["target"] == 2
+    assert saved["initial_target"] == 1
+    assert saved["target_history"] == [
+        {"effective_date": "2026-11-23", "target": 2}
+    ]
+    assert target_on(saved, date(2026, 11, 21)) == 1
+    assert target_on(saved, daily_edit_day) == 1
+    assert target_on(saved, date(2026, 11, 23)) == 2
+    assert saved["completed_dates"] == original["completed_dates"]
+    assert saved["created_at"] == original["created_at"]
+    assert saved["user_email"] == original["user_email"]
+    assert habits.count_documents({}) == 1
+
+
+def test_description_edit_preserves_pending_daily_target(
+    client, habits, owned_habit, daily_edit_day
+):
+    add_pending_daily_target(habits, owned_habit)
+    original = habits.find_one({"_id": owned_habit})
+
+    response = post_daily_target_edit(
+        client,
+        owned_habit,
+        2,
+        description="Updated description",
+    )
+
+    assert response.status_code == 302
+    saved = habits.find_one({"_id": owned_habit})
+
+    assert saved["description"] == "Updated description"
+    assert saved["initial_target"] == original["initial_target"]
+    assert saved["target_history"] == original["target_history"]
+    assert (
+        saved["goal_suggestion_last_decision"]
+        == original["goal_suggestion_last_decision"]
+    )
+
+
+def test_daily_target_edit_replaces_pending_change(
+    client, habits, owned_habit, daily_edit_day
+):
+    add_pending_daily_target(habits, owned_habit)
+
+    response = post_daily_target_edit(client, owned_habit, 3)
+
+    assert response.status_code == 302
+    saved = habits.find_one({"_id": owned_habit})
+
+    assert saved["target"] == 3
+    assert saved["target_history"] == [
+        {"effective_date": "2026-11-23", "target": 3}
+    ]
+    assert target_on(saved, daily_edit_day) == 1
+    assert target_on(saved, date(2026, 11, 23)) == 3
+
+
+def test_daily_target_edit_can_cancel_pending_change(
+    client, habits, owned_habit, daily_edit_day
+):
+    add_pending_daily_target(habits, owned_habit)
+
+    response = post_daily_target_edit(client, owned_habit, 1)
+
+    assert response.status_code == 302
+    saved = habits.find_one({"_id": owned_habit})
+
+    assert saved["target"] == 1
+    assert saved["target_history"] == []
+    assert target_on(saved, daily_edit_day) == 1
+    assert target_on(saved, date(2026, 11, 23)) == 1
+
+
+def test_dated_target_frequency_change_is_rejected_without_writing(
+    client, habits, owned_habit, daily_edit_day
+):
+    add_pending_daily_target(habits, owned_habit)
+    original = habits.find_one({"_id": owned_habit})
+
+    response = post_daily_target_edit(
+        client,
+        owned_habit,
+        2,
+        frequency="weekly",
+    )
+
+    assert response.status_code == 400
+    assert b"Frequency cannot be changed" in response.data
+    assert habits.find_one({"_id": owned_habit}) == original
+
+
+def test_invalid_daily_edit_does_not_replace_pending_target(
+    client, habits, owned_habit, daily_edit_day
+):
+    add_pending_daily_target(habits, owned_habit)
+    original = habits.find_one({"_id": owned_habit})
+
+    response = post_daily_target_edit(
+        client,
+        owned_habit,
+        3,
+        name="",
+    )
+
+    assert response.status_code == 400
+    assert habits.find_one({"_id": owned_habit}) == original
