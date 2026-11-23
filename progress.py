@@ -100,13 +100,97 @@ def completion_count_on(habit, on_date):
     """Return the number of completions for a particular date."""
     return max(_completion_counts(habit).get(on_date, 0), 0)
 
+def target_on(habit, on_date):
+    """Return the daily target effective on a date.
+
+    Habits without target history retain their existing target behavior.
+    Dated target changes currently apply only to daily habits.
+    """
+    current_target = max(int(habit.get("target") or 1), 1)
+
+    if habit.get("frequency") != "daily":
+        return current_target
+
+    target = max(int(habit.get("initial_target") or current_target), 1)
+    changes = sorted(
+        habit.get("target_history") or [],
+        key=lambda record: record["effective_date"],
+    )
+
+    for change in changes:
+        effective_date = date.fromisoformat(change["effective_date"])
+        if effective_date > on_date:
+            break
+        target = max(int(change["target"]), 1)
+
+    return target
+
+def goal_increase_suggestion(habit, today):
+    """Suggest a daily target increase after seven successful prior days.
+
+    This calculation never modifies the habit. Today is excluded from
+    the success window. A decision starts a fresh qualification window.
+    """
+    if habit.get("frequency") != "daily":
+        return None
+
+    if habit.get("status", "active") != "active":
+        return None
+
+    if current_break(habit, today):
+        return None
+
+    window_start = today - timedelta(days=7)
+    window_end = today - timedelta(days=1)
+    start_day = _start_day(habit)
+
+    if start_day is None or start_day > window_start:
+        return None
+
+    last_decision = _as_date(habit.get("goal_suggestion_last_decision"))
+    if last_decision is not None and window_start <= last_decision:
+        return None
+
+    history = habit.get("target_history") or []
+    if any(
+        date.fromisoformat(change["effective_date"]) > today
+        for change in history
+    ):
+        return None
+
+    current_target = target_on(habit, today)
+    counts = _completion_counts(habit)
+    skipped_days = _skipped_dates(habit)
+
+    day = window_start
+    while day <= window_end:
+        if current_break(habit, day):
+            return None
+
+        if day in skipped_days and not counts.get(day):
+            return None
+
+        if target_on(habit, day) != current_target:
+            return None
+
+        if counts.get(day, 0) < current_target:
+            return None
+
+        day += timedelta(days=1)
+
+    return {
+        "current_target": current_target,
+        "suggested_target": current_target + 1,
+        "effective_date": (today + timedelta(days=1)).isoformat(),
+        "window_start": window_start.isoformat(),
+        "window_end": window_end.isoformat(),
+    }
 
 def current_period_progress(habit, today):
     """Return completion progress for the current day, week, or month."""
     frequency = habit.get("frequency") or "daily"
     start = period_start(frequency, today)
-    target = max(int(habit.get("target") or 1), 1)
-
+    target = target_on(habit, today)
     counts = _completion_counts(habit)
 
     completed = sum(
@@ -142,9 +226,9 @@ def calculate_overall_progress(habits, end_date=None, period_days=7):
     completed = 0
 
     for habit in habits:
-        target = max(int(habit.get("target", 1)), 1)
         completion_counts = _completion_counts(habit)
         for occurrence_date in _scheduled_dates(habit, start_date, end_date):
+            target = target_on(habit, occurrence_date)
             count = completion_counts.get(occurrence_date, 0)
             if not count and current_break(habit, occurrence_date):
                 continue
@@ -244,7 +328,6 @@ def habit_periods(habit, today):
     break), or ``in_progress`` (the current period, target not reached yet).
     """
     frequency = _frequency(habit)
-    target = max(int(habit.get("target") or 1), 1)
     counts = _completion_counts(habit)
     # a completion replaces a skip on the same day
     skipped_days = {day for day in _skipped_dates(habit) if not counts.get(day)}
@@ -267,6 +350,7 @@ def habit_periods(habit, today):
         skipped = skipped_by_period.get(start, 0)
         length = (next_start - start).days
         active_days = length - _break_days(habit, start, end, counts)
+        target = target_on(habit, start)
         period_target = ceil(target * active_days / length)
         needed = period_target - skipped
         if completed and completed >= needed:

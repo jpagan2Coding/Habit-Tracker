@@ -376,6 +376,84 @@
 
 
             <!-- Today's Habits -->
+                         {% if goal_suggestions %}
+            <section class="mb-6"
+                     aria-labelledby="goal-suggestions-heading">
+                <h2 id="goal-suggestions-heading"
+                    class="mb-4 text-2xl font-bold text-slate-900">
+                    Ready for a small increase?
+                </h2>
+
+                <div class="space-y-3">
+                    {% for suggestion in goal_suggestions %}
+                    <article data-goal-suggestion="{{ suggestion.habit_id }}"
+                             class="rounded-xl border border-indigo-200 bg-indigo-50 p-5">
+                        <h3 class="text-lg font-semibold text-slate-900">
+                            {{ suggestion.habit_name }}
+                        </h3>
+
+                        <p class="mt-2 text-sm text-slate-700">
+                            You met your daily target on each of the previous
+                            seven days. Increase your daily target from
+                            {{ suggestion.current_target }} to
+                            {{ suggestion.suggested_target }}?
+                        </p>
+
+                        <p class="mt-2 text-sm text-slate-600">
+                            Starts tomorrow
+                            (<time datetime="{{ suggestion.effective_date }}">{{ suggestion.effective_date }}</time>).
+                            Today's goal and past results stay unchanged.
+                            Your target will not increase unless you accept.
+                        </p>
+
+                        <div class="mt-4 flex flex-wrap gap-3">
+                            <form method="POST"
+                                  action="{{ url_for('decide_goal_increase', habit_id=suggestion.habit_id, decision='accept') }}">
+                                <input type="hidden"
+                                       name="csrf_token"
+                                       value="{{ habit_csrf_token }}">
+                                <input type="hidden"
+                                       name="current_target"
+                                       value="{{ suggestion.current_target }}">
+                                <input type="hidden"
+                                       name="effective_date"
+                                       value="{{ suggestion.effective_date }}">
+                                <button type="submit"
+                                        class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+                                        aria-label="Accept daily target increase for {{ suggestion.habit_name }}">
+                                    Accept increase
+                                </button>
+                            </form>
+
+                            <form method="POST"
+                                  action="{{ url_for('decide_goal_increase', habit_id=suggestion.habit_id, decision='dismiss') }}">
+                                <input type="hidden"
+                                       name="csrf_token"
+                                       value="{{ habit_csrf_token }}">
+                                <input type="hidden"
+                                       name="current_target"
+                                       value="{{ suggestion.current_target }}">
+                                <input type="hidden"
+                                       name="effective_date"
+                                       value="{{ suggestion.effective_date }}">
+                                <button type="submit"
+                                        class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                        aria-label="Dismiss daily target increase for {{ suggestion.habit_name }}">
+                                    Not now
+                                </button>
+                            </form>
+                        </div>
+
+                        <p class="mt-3 text-xs text-slate-600">
+                            If you dismiss this suggestion, you can qualify
+                            again after seven new successful days.
+                        </p>
+                    </article>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+
             <section class="mb-6">
                 <div class="mb-4">
                     <h2 class="text-2xl font-bold text-slate-900">

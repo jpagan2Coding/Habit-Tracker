@@ -11,7 +11,12 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from progress import _completion_counts, current_break, is_scheduled_on
+from progress import (
+    _completion_counts,
+    current_break,
+    is_scheduled_on,
+    target_on,
+)
 
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
@@ -136,7 +141,7 @@ def _goal_met(habit, local_date):
         counts.get(start + timedelta(days=offset), 0)
         for offset in range((local_date - start).days + 1)
     )
-    target = max(int(habit.get("target", 1)), 1)
+    target = target_on(habit, local_date)
     if frequency in ("weekly", "monthly"):
         return period_count >= target
     return counts.get(local_date, 0) >= target

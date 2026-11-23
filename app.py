@@ -3,6 +3,7 @@ import io
 import os
 import re
 import secrets
+import json
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache, wraps
 from pathlib import Path
@@ -40,6 +41,8 @@ from progress import (
     current_period_progress,
     habit_summary,
     period_start,
+    target_on,
+    goal_increase_suggestion,
 )
 from reminders import format_reminder_schedule, validate_reminder_settings
 
@@ -455,6 +458,33 @@ def is_overdue(habit, today):
         return False
 
     frequency = habit.get("frequency") or "daily"
+    if frequency == "daily":
+        today_iso = today.isoformat()
+
+        if today_iso in (habit.get("skipped_dates") or []):
+            return False
+
+        if completion_count_on(habit, today) >= target_on(habit, today):
+            return False
+
+        yesterday = today - timedelta(days=1)
+        habit_start = _habit_start(habit)
+
+        if habit_start is not None and yesterday < habit_start:
+            return False
+
+        if current_break(habit, yesterday):
+            return False
+
+        yesterday_count = completion_count_on(habit, yesterday)
+        yesterday_skipped = yesterday.isoformat() in (
+            habit.get("skipped_dates") or []
+        )
+
+        if yesterday_skipped and yesterday_count == 0:
+            return False
+
+        return yesterday_count < target_on(habit, yesterday)
     today_iso = today.isoformat()
     completed = {d for d in habit.get("completed_dates", []) if isinstance(d, str)}
     skipped = {d for d in habit.get("skipped_dates", []) if isinstance(d, str)}
@@ -511,6 +541,17 @@ def habit_dashboard():
     today_date = current_app_date()
     today = today_date.isoformat()
     progress_period = _selected_progress_period()
+    goal_suggestions = []
+    for habit in habits:
+        suggestion = goal_increase_suggestion(habit, today_date)
+        if suggestion is not None:
+            goal_suggestions.append(
+                {
+                    "habit_id": habit["id"],
+                    "habit_name": habit.get("name", ""),
+                    **suggestion,
+                }
+            )
 
 # show each habit's start date in All My Habits and flag ones that haven't started
     for habit in habits:
@@ -601,6 +642,7 @@ def habit_dashboard():
         page_id="dashboard",
         habits=habits,
         todays_habits=todays_habits,
+        goal_suggestions=goal_suggestions,
         completion_by_id=completion_by_id,
         progress_by_id=progress_by_id,
         today_count_by_id=today_count_by_id,
@@ -1153,12 +1195,12 @@ def habit_history(habit_id):
     return render_template(
         "apps/habit_tracker/history.html",
         habit=habit,
+        current_target=target_on(habit, today),
         habit_id=habit_id,
         history=history,
         selected_period=period,
         today=today,
     )
-
 def _owned_notification(notification_id):
     return _owned_document("notifications", notification_id)
 
@@ -1450,6 +1492,85 @@ def _parse_history_row(row):
         raise ValueError("A history status requires a completion date.")
     return None
 
+def _parse_goal_settings(value, current_target, frequency):
+    """Validate optional progressive-goal metadata from a habit backup."""
+    try:
+        settings = json.loads(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError("Invalid goal settings.") from error
+
+    allowed = {
+        "initial_target",
+        "target_history",
+        "start_date",
+        "goal_suggestion_last_decision",
+    }
+    if not isinstance(settings, dict) or set(settings) - allowed:
+        raise ValueError("Invalid goal settings.")
+
+    if frequency != "daily":
+        raise ValueError("Goal settings require a daily habit.")
+
+    initial_target = settings.get("initial_target")
+    if type(initial_target) is not int or initial_target < 1:
+        raise ValueError("Initial target must be a positive whole number.")
+
+    history = settings.get("target_history")
+    if not isinstance(history, list):
+        raise ValueError("Goal settings require a target history list.")
+
+    if not history and initial_target != current_target:
+        raise ValueError(
+            "Without target history, the initial target must match "
+            "the habit target."
+        )
+    previous_date = None
+    for change in history:
+        if not isinstance(change, dict) or set(change) != {
+            "effective_date", "target"
+        }:
+            raise ValueError("Invalid target history entry.")
+
+        raw_date = change["effective_date"]
+        if not isinstance(raw_date, str):
+            raise ValueError("Target dates must use YYYY-MM-DD.")
+
+        try:
+            effective = date.fromisoformat(raw_date)
+        except ValueError as error:
+            raise ValueError("Invalid target effective date.") from error
+
+        if effective.isoformat() != raw_date:
+            raise ValueError("Target dates must use YYYY-MM-DD.")
+
+        if previous_date is not None and effective <= previous_date:
+            raise ValueError("Target history dates must be unique and ordered.")
+
+        if type(change["target"]) is not int or change["target"] < 1:
+            raise ValueError("History targets must be positive whole numbers.")
+
+        previous_date = effective
+
+    if history and history[-1]["target"] != current_target:
+        raise ValueError("The latest history target must match the habit target.")
+
+    for field in ("start_date", "goal_suggestion_last_decision"):
+        if field not in settings:
+            continue
+
+        raw_date = settings[field]
+        if not isinstance(raw_date, str):
+            raise ValueError("Goal settings dates must use YYYY-MM-DD.")
+
+        try:
+            parsed = date.fromisoformat(raw_date)
+        except ValueError as error:
+            raise ValueError("Invalid goal settings date.") from error
+
+        if parsed.isoformat() != raw_date:
+            raise ValueError("Goal settings dates must use YYYY-MM-DD.")
+
+    return settings
 
 def _parse_habit_file(payload):
     """Validate a habit file before writing anything to the database."""
@@ -1457,7 +1578,13 @@ def _parse_habit_file(payload):
         io.StringIO(payload.decode("utf-8-sig"), newline=""),
         strict=True,
     )
-    has_counts = reader.fieldnames == [*HABIT_FILE_FIELDS, "count"]
+    has_goal_settings = reader.fieldnames == [
+        *HABIT_FILE_FIELDS, "count", "goal_settings"
+    ]
+    has_counts = (
+        reader.fieldnames == [*HABIT_FILE_FIELDS, "count"]
+        or has_goal_settings
+    )
     if reader.fieldnames != HABIT_FILE_FIELDS and not has_counts:
         raise ValueError(
             "The file must contain the supported habit columns in order."
@@ -1475,6 +1602,8 @@ def _parse_habit_file(payload):
             for field in HABIT_FILE_FIELDS
             if field not in ("completed_date", "status")
         }
+        if has_goal_settings:
+            current["goal_settings"] = row["goal_settings"]
         if details is not None and current != details:
             raise ValueError("All rows must describe the same habit.")
         details = current
@@ -1552,8 +1681,15 @@ def _parse_habit_file(payload):
             for history_date, (status, count)
             in completion_counts.items()
         ]
+    if has_goal_settings:
+        habit.update(
+            _parse_goal_settings(
+                details["goal_settings"],
+                habit["target"],
+                habit["frequency"],
+            )
+        )
     return habit
-
 
 def _format_export_datetime(value):
     if not isinstance(value, datetime):
@@ -1598,7 +1734,7 @@ def import_habit():
 
 @app.route("/habits/<habit_id>/export")
 def export_habit(habit_id):
-    """Download an owned habit and its completion and skip history as UTF-8 CSV."""
+    """Download an owned habit and its history as UTF-8 CSV."""
     if not session.get("user_id") or not session.get("user_email"):
         return redirect(url_for("login"))
 
@@ -1606,19 +1742,28 @@ def export_habit(habit_id):
     created_at = _format_export_datetime(habit.get("created_at"))
     output = io.StringIO(newline="")
     history_rows = _serialize_habit_history(habit)
+
+    has_goal_settings = (
+        "initial_target" in habit
+        or bool(habit.get("target_history"))
+        or bool(habit.get("goal_suggestion_last_decision"))
+    )
     has_multiple_checkins = any(
         status == "completed"
-        and completion_count_on(habit, date.fromisoformat(history_date)) > 1
+        and completion_count_on(
+            habit, date.fromisoformat(history_date)
+        ) > 1
         for history_date, status in history_rows
         if history_date
     )
-    fields = (
-        [*HABIT_FILE_FIELDS, "count"]
-        if has_multiple_checkins
-        else HABIT_FILE_FIELDS
-    )
-    writer = csv.DictWriter(output, fieldnames=fields)
-    writer.writeheader()
+    has_counts = has_multiple_checkins or has_goal_settings
+
+    fields = list(HABIT_FILE_FIELDS)
+    if has_counts:
+        fields.append("count")
+    if has_goal_settings:
+        fields.append("goal_settings")
+
     details = {
         "habit_id": str(habit["_id"]),
         "name": habit.get("name", ""),
@@ -1627,13 +1772,36 @@ def export_habit(habit_id):
         "frequency": habit.get("frequency", ""),
         "created_at": created_at or "",
     }
+
+    if has_goal_settings:
+        settings = {
+            "initial_target": max(
+                int(habit.get("initial_target") or habit.get("target") or 1),
+                1,
+            ),
+            "target_history": habit.get("target_history") or [],
+        }
+        for field in ("start_date", "goal_suggestion_last_decision"):
+            if habit.get(field):
+                settings[field] = habit[field]
+
+        details["goal_settings"] = json.dumps(
+            settings,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+    writer = csv.DictWriter(output, fieldnames=fields)
+    writer.writeheader()
+
     for history_date, status in history_rows:
         row = {
             **details,
             "completed_date": history_date,
             "status": status,
         }
-        if has_multiple_checkins:
+
+        if has_counts:
             row["count"] = (
                 completion_count_on(
                     habit, date.fromisoformat(history_date)
@@ -1641,6 +1809,7 @@ def export_habit(habit_id):
                 if history_date and status == "completed"
                 else 0
             )
+
         writer.writerow(row)
 
     filename = secure_filename(habit.get("name", ""))[:80] or "habit"
@@ -1654,6 +1823,162 @@ def export_habit(habit_id):
     response.headers["Cache-Control"] = "private, no-store"
     return response
 
+def _goal_decision_query(query, habit):
+    """Require eligibility-related data to match the snapshot we checked."""
+    fields = (
+        "frequency",
+        "status",
+        "start_date",
+        "created_at",
+        "target",
+        "initial_target",
+        "target_history",
+        "completed_dates",
+        "completion_history",
+        "skipped_dates",
+        "breaks",
+        "goal_suggestion_last_decision",
+    )
+    conditions = [dict(query)]
+    for field in fields:
+        if field in habit:
+            conditions.append({field: {"$eq": habit[field]}})
+        else:
+            conditions.append({field: {"$exists": False}})
+
+    return {"$and": conditions}
+
+
+@app.route(
+    "/habits/<habit_id>/goal-increase/<decision>",
+    methods=["POST"],
+)
+def decide_goal_increase(habit_id, decision):
+    """Accept or dismiss a currently eligible daily-goal suggestion."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    query, habit = _owned_habit(habit_id)
+    _validate_habit_form_token()
+
+    if decision not in ("accept", "dismiss"):
+        abort(400, description="Choose accept or dismiss.")
+
+    today = current_app_date()
+    suggestion = goal_increase_suggestion(habit, today)
+
+    if suggestion is None:
+        abort(
+            409,
+            description="This goal suggestion is no longer available.",
+        )
+
+    if (
+        request.form.get("current_target")
+        != str(suggestion["current_target"])
+        or request.form.get("effective_date")
+        != suggestion["effective_date"]
+    ):
+        abort(
+            409,
+            description="This goal suggestion has changed. Reload the Dashboard.",
+        )
+
+    updates = {
+        "goal_suggestion_last_decision": today.isoformat(),
+    }
+
+    if decision == "accept":
+        history = [
+            dict(change)
+            for change in habit.get("target_history") or []
+        ]
+        history.append(
+            {
+                "effective_date": suggestion["effective_date"],
+                "target": suggestion["suggested_target"],
+            }
+        )
+        history.sort(key=lambda change: change["effective_date"])
+
+        updates.update(
+            {
+                "initial_target": max(
+                    int(
+                        habit.get("initial_target")
+                        or suggestion["current_target"]
+                    ),
+                    1,
+                ),
+                "target": suggestion["suggested_target"],
+                "target_history": history,
+            }
+        )
+
+    result = get_db()["habits"].update_one(
+        _goal_decision_query(query, habit),
+        {"$set": updates},
+    )
+
+    if result.matched_count == 0:
+        abort(
+            409,
+            description="This habit changed. Reload the Dashboard and try again.",
+        )
+
+    if decision == "accept":
+        flash(
+            "Goal increase accepted. Your new daily target starts tomorrow.",
+            "success",
+        )
+    else:
+        flash("Goal suggestion dismissed. Your target is unchanged.", "success")
+
+    return redirect(url_for("habit_dashboard"))
+
+def _target_edit_updates(habit, target, frequency, today):
+    """Schedule daily target edits without changing today's target."""
+    old_frequency = habit.get("frequency") or "daily"
+    has_dated_targets = (
+        "initial_target" in habit or bool(habit.get("target_history"))
+    )
+
+    if frequency != old_frequency and has_dated_targets:
+        raise ValueError(
+            "Frequency cannot be changed after dated target changes. "
+            "Create a new habit for a different frequency."
+        )
+
+    if frequency != "daily" or old_frequency != "daily":
+        return {}
+
+    stored_target = max(int(habit.get("target") or 1), 1)
+    if target == stored_target:
+        return {}
+
+    today_target = target_on(habit, today)
+    history = [
+        dict(change)
+        for change in habit.get("target_history") or []
+        if date.fromisoformat(change["effective_date"]) <= today
+    ]
+    history.sort(key=lambda change: change["effective_date"])
+
+    if target != today_target:
+        history.append(
+            {
+                "effective_date": (today + timedelta(days=1)).isoformat(),
+                "target": target,
+            }
+        )
+
+    return {
+        "initial_target": max(
+            int(habit.get("initial_target") or stored_target), 1
+        ),
+        "target_history": history,
+        "goal_suggestion_last_decision": today.isoformat(),
+    }
 
 @app.route("/habits/<habit_id>/edit", methods=["GET", "POST"])
 def edit_habit(habit_id):
@@ -1661,7 +1986,7 @@ def edit_habit(habit_id):
         return redirect(url_for("login"))
 
     query, habit = _owned_habit(habit_id)
-    today = datetime.utcnow().date()
+    today = current_app_date()
     errors = []
     form = {
         "name": habit.get("name", ""),
@@ -1706,13 +2031,27 @@ def edit_habit(habit_id):
         if start_date_error:
             errors.append(start_date_error)
 
-        when_missed, when_missed_error = _parse_when_missed(form["when_missed"])
+        when_missed, when_missed_error = _parse_when_missed(
+            form["when_missed"]
+        )
         if when_missed_error:
             errors.append(when_missed_error)
 
+        target_updates = {}
+        if not errors:
+            try:
+                target_updates = _target_edit_updates(
+                    habit,
+                    target,
+                    form["frequency"],
+                    today,
+                )
+            except ValueError as error:
+                errors.append(str(error))
+
         if not errors:
             result = get_db()["habits"].update_one(
-                query,
+                _goal_decision_query(query, habit),
                 {
                     "$set": {
                         "name": form["name"],
@@ -1726,11 +2065,17 @@ def edit_habit(habit_id):
                         "when_missed": when_missed,
                         "reminder_weekdays": form["reminder_weekdays"],
                         "reminder_month_day": form["reminder_month_day"],
+                        **target_updates,
                     }
                 },
             )
             if result.matched_count == 0:
-                abort(404)
+                abort(
+                    409,
+                    description=(
+                        "This habit changed. Reload the Edit page and try again."
+                    ),
+                )
             return redirect(url_for("habit_dashboard"))
 
     return render_template(
@@ -1740,6 +2085,11 @@ def edit_habit(habit_id):
         errors=errors,
         frequency_choices=FREQUENCY_CHOICES,
         editing=True,
+        current_daily_target=(
+            target_on(habit, today)
+            if habit.get("frequency") == "daily"
+            else None
+        ),
         habit_id=habit_id,
         today=today.isoformat(),
         habit_csrf_token=_habit_form_token(),
@@ -1816,7 +2166,7 @@ def pause_habit(habit_id):
         return redirect(url_for("login"))
 
     query, habit = _owned_habit(habit_id)
-    today = datetime.utcnow().date()
+    today = current_app_date()
     if current_break(habit, today):
         flash("This habit is already on a break.", "error")
         return redirect(url_for("habit_dashboard"))
@@ -1866,7 +2216,7 @@ def resume_habit(habit_id):
     query, habit = _owned_habit(habit_id)
     _validate_habit_form_token()
 
-    today = datetime.utcnow().date()
+    today = current_app_date()
     if not current_break(habit, today):
         flash("This habit isn't on a break.", "error")
         return redirect(url_for("habit_dashboard"))

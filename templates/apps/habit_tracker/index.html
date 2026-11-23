@@ -76,6 +76,19 @@
                            step="1"
                            class="w-full rounded-lg border border-slate-300 px-4 py-2.5"
                            placeholder="e.g., 3">
+                                               {% if editing and current_daily_target is defined and current_daily_target is not none %}
+                    <p id="daily-target-help"
+                       class="mt-2 text-sm text-slate-600">
+                        Today's target: {{ current_daily_target }}.
+                        Changes to this daily target start tomorrow.
+                        Today's goal stays unchanged.
+                    </p>
+                    <p class="mt-1 text-sm text-slate-500">
+                        The field shows your latest selected target, including
+                        any pending change. To cancel a pending change, enter
+                        today's target.
+                    </p>
+                    {% endif %}
                 </div>
 
                 <div>
