@@ -1,0 +1,61 @@
+.habit-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    border-radius: 0.625rem;
+    line-height: 1.2;
+}
+
+.habit-brand:focus-visible {
+    outline: 2px solid var(--habit-brand-focus-color, var(--color-teal));
+    outline-offset: 4px;
+}
+
+.habit-brand__mark {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 0.625rem;
+    background: linear-gradient(135deg, #142453 15%, var(--color-teal) 80%);
+    background-size: 200% 200%;
+    color: white;
+    font-size: 1rem;
+    font-weight: 700;
+    box-shadow: 0 3px 8px #14245333;
+}
+
+.habit-brand__name {
+    display: block;
+    color: var(--habit-brand-name-color, #142453);
+    font-size: 0.9375rem;
+    font-weight: 700;
+    letter-spacing: 0.075em;
+    text-transform: uppercase;
+}
+
+.habit-brand__name > span {
+    color: var(--habit-brand-accent-color, var(--color-teal));
+}
+
+.habit-brand__tagline {
+    display: block;
+    margin-top: 0.125rem;
+    color: var(--habit-brand-tagline-color, #475569);
+    font-size: 0.75rem;
+}
+
+.habit-brand:is(:hover, :focus-visible) .habit-brand__mark {
+    background-position: 100% 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .habit-brand__mark {
+        transition: background-position 280ms ease, transform 220ms ease;
+    }
+
+    .habit-brand:is(:hover, :focus-visible) .habit-brand__mark {
+        transform: translateY(-2px) rotate(-5deg);
+    }
+}

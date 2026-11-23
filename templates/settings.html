@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% set floating_success_messages = true %}
+{% set full_width_page = true %}
 
 {% block title %}Settings | Habit Tracker{% endblock %}
 
@@ -6,83 +8,85 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/habit-tracker.css') }}">
 {% endblock %}
 
-{% block content %}
-<div class="mx-auto max-w-2xl">
-    <a href="{{ url_for('habit_dashboard') }}"
-       class="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900">
-        ← Back to Dashboard
-    </a>
+{% block messages %}{% endblock %}
 
-    <section class="rounded-xl border border-slate-200 bg-white p-6 sm:p-8">
+{% block content %}
+<div class="dashboard-shell">
+    <header class="border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
+        {% with flash_categories = ['error'] %}
+            {% include "_flash_messages.html" %}
+        {% endwith %}
         <h1 class="text-2xl font-bold text-slate-900">Settings</h1>
         <p class="mt-1 text-sm text-slate-500">Manage your account and display preferences.</p>
+    </header>
 
-        <form method="POST" action="{{ url_for('settings') }}" class="mt-6">
+    <div class="dashboard-content-scroll p-5 sm:p-8">
+        <form method="POST" action="{{ url_for('settings') }}" class="space-y-5">
             <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
             <input type="hidden" name="action" value="save_settings">
 
-            <section class="border-b border-slate-200 pb-6" aria-labelledby="account-heading">
+            <section class="rounded-xl border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="account-heading">
                 <h2 id="account-heading" class="text-lg font-bold text-slate-900">Account</h2>
 
-                <div class="mt-4 space-y-4">
+                <div class="mt-4 grid gap-4 sm:grid-cols-2 sm:items-end">
                     <div>
                         <p class="text-sm font-semibold text-slate-700">Email address</p>
-                        <p id="email_address" class="mt-1 text-slate-600">{{ current_email }}</p>
+                        <p id="email_address" class="mt-2 break-words py-2 text-slate-600">{{ current_email }}</p>
                     </div>
 
-                <label for="new_username" class="block text-sm font-semibold text-slate-700">
-                    Username
-                    <input id="new_username" name="new_username" type="text" value="{{ request.form.get('new_username', current_username) }}"
-                           required maxlength="80" autocomplete="username"
-                           class="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2">
-                </label>
+                    <label for="new_username" class="block text-sm font-semibold text-slate-700">
+                        Username
+                        <input id="new_username" name="new_username" type="text" value="{{ request.form.get('new_username', current_username) }}"
+                               required maxlength="80" autocomplete="username"
+                               class="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2">
+                    </label>
                 </div>
             </section>
 
-            <section class="mt-6 border-b border-slate-200 pb-6" aria-labelledby="password-heading">
-            <h2 id="password-heading" class="text-lg font-bold text-slate-900">Change Password</h2>
-            <p class="mt-1 text-sm text-slate-500">Leave these fields blank to keep your current password.</p>
+            <section class="rounded-xl border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="password-heading">
+                <h2 id="password-heading" class="text-lg font-bold text-slate-900">Change Password</h2>
+                <p class="mt-1 text-sm text-slate-500">Leave these fields blank to keep your current password.</p>
 
-            <div class="mt-4 space-y-4">
-                <label for="current_password" class="block text-sm font-semibold text-slate-700">
-                    Current password
-                    <input id="current_password" name="current_password" type="password" value=""
-                           autocomplete="off" readonly
-                           class="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2">
-                </label>
-                <label for="new_password" class="block text-sm font-semibold text-slate-700">
-                    New password
-                    <input id="new_password" name="new_password" type="password" value="" minlength="8"
-                           autocomplete="off" readonly
-                           class="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2">
-                </label>
-                <label for="confirm_password" class="block text-sm font-semibold text-slate-700">
-                    Confirm new password
-                    <input id="confirm_password" name="confirm_password" type="password" value="" minlength="8"
-                           autocomplete="off" readonly
-                           class="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2">
-                </label>
-            </div>
+                <div class="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <label for="current_password" class="block text-sm font-semibold text-slate-700">
+                        Current password
+                        <input id="current_password" name="current_password" type="password" value=""
+                               autocomplete="off" readonly
+                               class="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2">
+                    </label>
+                    <label for="new_password" class="block text-sm font-semibold text-slate-700">
+                        New password
+                        <input id="new_password" name="new_password" type="password" value="" minlength="8"
+                               autocomplete="off" readonly
+                               class="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2">
+                    </label>
+                    <label for="confirm_password" class="block text-sm font-semibold text-slate-700">
+                        Confirm new password
+                        <input id="confirm_password" name="confirm_password" type="password" value="" minlength="8"
+                               autocomplete="off" readonly
+                               class="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2">
+                    </label>
+                </div>
             </section>
 
-            <section class="mt-6" aria-labelledby="display-heading">
+            <section class="rounded-xl border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="display-heading">
                 <h2 id="display-heading" class="text-lg font-bold text-slate-900">Display preferences</h2>
 
-            <fieldset>
-                <legend class="mb-2 block text-sm font-semibold text-slate-700">Text size</legend>
+                <fieldset class="mt-4 min-w-0">
+                    <legend class="mb-2 block text-sm font-semibold text-slate-700">Text size</legend>
 
-                <div class="space-y-2">
-                    {% for value, label in text_sizes.items() %}
-                    <label class="flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 {% if value == text_size %}border-indigo-300 bg-indigo-50 font-semibold text-indigo-700{% else %}border-slate-300 text-slate-700 hover:bg-slate-50{% endif %}">
-                        <input type="radio" name="text_size" value="{{ value }}" {% if value == text_size %}checked{% endif %}>
-                        {{ label }}
-                    </label>
-                    {% endfor %}
-                </div>
-            </fieldset>
+                    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        {% for value, label in text_sizes.items() %}
+                        <label class="flex cursor-pointer items-center gap-3 rounded-lg border px-4 py-3 {% if value == text_size %}border-indigo-300 bg-indigo-50 font-semibold text-indigo-700{% else %}border-slate-300 text-slate-700 hover:bg-slate-50{% endif %}">
+                            <input type="radio" name="text_size" value="{{ value }}" {% if value == text_size %}checked{% endif %}>
+                            {{ label }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                </fieldset>
             </section>
 
-            <div class="flex justify-end gap-3 pt-6">
+            <div class="flex justify-end">
                 <button type="submit"
                         class="rounded-lg bg-blue-950 px-6 py-3 font-semibold text-white hover:bg-blue-900">
                     Save Settings
@@ -98,7 +102,7 @@
         </div>
 
         {% if dev_time_travel_enabled %}
-        <section class="mt-8 border-t border-slate-200 pt-6" aria-labelledby="dev-clock-heading">
+        <section class="mt-6 rounded-xl border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="dev-clock-heading">
             <h2 id="dev-clock-heading" class="text-lg font-bold text-slate-900">Developer clock</h2>
             <p class="mt-1 text-sm text-slate-600">
                 Temporarily set the date and time used by the app. The time is in UTC;
@@ -124,7 +128,7 @@
             </form>
         </section>
         {% endif %}
-    </section>
+    </div>
 </div>
 {% endblock %}
 

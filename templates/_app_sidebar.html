@@ -1,0 +1,78 @@
+{% set sidebar_link_classes = "transition-colors flex items-center gap-3 rounded-lg px-4 py-3 font-medium hover:bg-slate-800 hover:text-white aria-[current]:bg-blue-900 aria-[current]:text-white" %}
+<aside class="shrink-0 bg-slate-900 text-slate-200 lg:w-64">
+
+    <nav aria-label="Habit Tracker navigation" class="grid gap-1 px-4 py-4 sm:grid-cols-2 lg:grid-cols-1 lg:py-7">
+        <a
+            href="{{ url_for('habit_dashboard') }}"
+            {% if request.endpoint == 'habit_dashboard' %}aria-current="page"{% endif %}
+            class="{{ sidebar_link_classes }}"
+        >
+            <svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M3 13h2l2-6 4 12 3-8 2 2h5"></path>
+            </svg>
+            Dashboard
+        </a>
+
+        <a href="{{ url_for('habit_tracker') }}"
+            {% if request.endpoint == 'habit_tracker' %}aria-current="page"{% endif %}
+            class="{{ sidebar_link_classes }}">
+            <svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            My Habits
+        </a>
+
+        <a href="{{ url_for('summary') }}"
+            {% if request.endpoint == 'summary' %}aria-current="page"{% endif %}
+            class="{{ sidebar_link_classes }}">
+            <svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M3 3v18h18M7 15l3-3 3 2 4-5"></path>
+            </svg>
+            Summary
+        </a>
+        <a id="shortcut-settings"
+            href="{{ url_for('settings') }}"
+            {% if request.endpoint == 'settings' %}aria-current="page"{% endif %}
+            class="{{ sidebar_link_classes }}">
+            <svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M10 3h4l.5 2.4 1.6.9 2.3-.8 2 3.4-1.8 1.6v3l1.8 1.6-2 3.4-2.3-.8-1.6.9L14 21h-4l-.5-2.4-1.6-.9-2.3.8-2-3.4 1.8-1.6v-3L3.6 8.9l2-3.4 2.3.8 1.6-.9L10 3z"></path>
+                <circle cx="12" cy="12" r="3" stroke-width="2"></circle>
+            </svg>
+            Settings
+        </a>
+
+        <form action="{{ url_for('logout') }}" method="post">
+            <button type="submit" class="transition-colors flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left font-medium hover:bg-slate-800 hover:text-white">
+                <svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 8l4 4m0 0-4 4m4-4H9m3-6H6v12h6"></path>
+                </svg>
+                Log Out
+            </button>
+        </form>
+
+        <a href="{{ url_for('delete_account_data') }}"
+            {% if request.endpoint == 'delete_account_data' %}aria-current="page"{% endif %}
+            class="{{ sidebar_link_classes }}">
+            <svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+            </svg>
+            Delete My Data
+        </a>
+
+        <a href="{{ url_for('delete_account') }}"
+            {% if request.endpoint == 'delete_account' %}aria-current="page"{% endif %}
+            class="{{ sidebar_link_classes }}">
+            <svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M6 7h12l-1 12a2 2 0 01-2 2H9a2 2 0 01-2-2L6 7zm3-3h6a2 2 0 012 2v2H7V6a2 2 0 012-2z"></path>
+            </svg>
+            Delete Account
+        </a>
+
+    </nav>
+</aside>

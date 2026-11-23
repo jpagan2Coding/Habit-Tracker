@@ -1,0 +1,14 @@
+{% with messages = get_flashed_messages(with_categories=true, category_filter=flash_categories|default(())) %}
+    {% if floating_success_messages %}
+        {% set messages = messages|rejectattr('0', 'equalto', 'success')|list %}
+    {% endif %}
+    {% if messages %}
+        <div class="mb-6 space-y-2{% if flash_top_spacing %} pt-8{% endif %}">
+            {% for category, message in messages %}
+                <div class="p-4 rounded-lg text-sm {% if category == 'error' %}bg-red-50 text-red-700 border border-red-200{% else %}bg-[var(--color-teal-soft)] text-[color:var(--color-teal)] border border-[color:var(--color-teal-border)]{% endif %}">
+                    {{ message }}
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+{% endwith %}

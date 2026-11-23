@@ -63,6 +63,9 @@ def test_history_page_loads(history_client, history_habit):
 
     assert "Completion History" in html
     assert "Brush Teeth" in html
+    sidebar = html.split("<aside", 1)[1].split("</aside>", 1)[0]
+    assert 'href="/habit-tracker"' in sidebar
+    assert "aria-current=" not in sidebar
 
 
 def test_history_displays_completion_statuses(

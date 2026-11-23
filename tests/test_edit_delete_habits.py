@@ -418,6 +418,13 @@ def test_bulk_delete_duplicate_ids_count_once(client, habits, owned_habit):
             "1 habit deleted successfully.",
         ) in session.get("_flashes", [])
 
+    dashboard = client.get(response.headers["Location"]).data
+    toast = dashboard.split(b'id="success-toast"', 1)[1].split(b"<main", 1)[0]
+    message = b"1 habit deleted successfully."
+    assert dashboard.count(message) == 1
+    assert b'class="fixed ' in toast
+    assert message in toast
+
 @pytest.fixture
 def daily_edit_day(monkeypatch):
     today = date(2026, 11, 22)

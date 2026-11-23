@@ -10,12 +10,7 @@
 {% block content %}
 <section class="mx-auto max-w-5xl px-4 py-8">
 
-    <a href="{{ url_for('habit_dashboard') }}"
-       class="text-sm font-semibold text-indigo-700 hover:underline">
-        &larr; Back to Dashboard
-    </a>
-
-    <div class="mt-6">
+    <div>
         <h1 class="text-3xl font-bold text-slate-900">
             Completion History
         </h1>
@@ -76,7 +71,7 @@
         {% if history %}
 
         {% set status_classes = {
-            'Completed': 'bg-emerald-50 text-emerald-700',
+            'Completed': 'bg-[var(--color-teal-soft)] text-[color:var(--color-teal)]',
             'Missed': 'bg-red-50 text-red-700',
             'Skipped': 'bg-slate-100 text-slate-600',
             'Overdue': 'bg-amber-50 text-amber-700',
