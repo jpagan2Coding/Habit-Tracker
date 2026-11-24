@@ -127,6 +127,34 @@ def test_all_pages_get_returns_ok(authenticated_client, endpoint):
     assert response.status_code == 200
 
 
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/dashboard",
+        "/habit-tracker",
+        "/summary",
+        "/settings",
+        "/account/delete-data",
+        "/account/delete-account",
+    ],
+)
+def test_signed_in_pages_share_navigation(authenticated_client, path):
+    response = authenticated_client.get(path)
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert html.count('aria-label="Habit Tracker navigation"') == 1
+    assert html.count('class="habit-brand"') == 1
+    header = html.split("<nav", 1)[1].split("</nav>", 1)[0]
+    assert 'title="Test User"' in header
+    assert "> T </span>" in " ".join(header.split())
+    assert 'id="mobileMenu"' not in html
+    sidebar = html.split("<aside", 1)[1].split("</aside>", 1)[0]
+    active_link = sidebar.split(f'href="{path}"', 1)[1].split(">", 1)[0]
+    assert 'aria-current="page"' in active_link
+    assert 'action="/logout" method="post"' in sidebar
+
+
 # === Registration Tests ===
 
 from datetime import datetime  # noqa: E402

@@ -40,16 +40,12 @@
 }
 
 .dashboard-shell {
-    margin: -2rem -1rem;
+    margin: 0 -1rem -2rem;
     background: #f5f7fb;
 }
 
 .dashboard-content-scroll {
     overflow: visible;
-}
-
-.sidebar-link {
-    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .summary-card,
@@ -61,13 +57,13 @@
 
 @media (min-width: 640px) {
     .dashboard-shell {
-        margin: -2rem -1.5rem;
+        margin-inline: -1.5rem;
     }
 }
 
 @media (min-width: 1024px) {
     .dashboard-shell {
-        margin: -2rem;
+        margin-inline: -2rem;
     }
 }
 
@@ -97,7 +93,7 @@
 }
 
 .habit-history-met {
-    background: #059669;
+    background: var(--color-teal);
 }
 
 .habit-history-skipped {

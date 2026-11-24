@@ -44,8 +44,10 @@ def press_shortcut(page, key):
 
 def disable_shortcuts(page):
     """Disable shortcuts through the checkbox's keyboard interaction."""
+    page.locator("summary").filter(has_text="Keyboard Shortcuts").click()
     toggle = page.locator("#keyboard-shortcuts-enabled")
 
+    expect(toggle).to_be_visible()
     expect(toggle).to_be_checked()
     toggle.focus()
     toggle.press("Space")
@@ -54,6 +56,19 @@ def disable_shortcuts(page):
     expect(page.locator("#keyboard-shortcut-status")).to_have_text(
         "Keyboard shortcuts disabled."
     )
+
+
+def test_shortcut_accordion_starts_closed_and_toggles_by_keyboard(shortcut_page):
+    page = shortcut_page
+    summary = page.locator("summary").filter(has_text="Keyboard Shortcuts")
+    toggle = page.locator("#keyboard-shortcuts-enabled")
+
+    expect(toggle).to_be_hidden()
+    summary.focus()
+    page.keyboard.press("Enter")
+    expect(toggle).to_be_visible()
+    page.keyboard.press("Enter")
+    expect(toggle).to_be_hidden()
 
 
 @pytest.mark.parametrize(
@@ -244,3 +259,32 @@ def test_missing_target_shows_feedback(
 
     expect(page).to_have_url("http://habit-tracker.test/dashboard")
     expect(page.locator("#keyboard-shortcut-status")).to_have_text(message)
+
+
+def test_habit_actions_open_from_both_dashboard_sections(authenticated_client, page):
+    response = authenticated_client.post(
+        "/habit-tracker", data={"name": "Drink water", "target": "1", "frequency": "daily"}
+    )
+    assert response.status_code == 302
+    page.set_viewport_size({"width": 360, "height": 640})
+    page.route("**/*", lambda route: route.abort())
+    page.set_content(authenticated_client.get("/dashboard").get_data(as_text=True))
+
+    today = page.locator("article[data-habit-id]")
+    all_habits = page.locator("tr").filter(has_text="Drink water")
+    expect(today.get_by_role("button", name="Mark Complete")).to_be_visible()
+
+    for habit, action in ((today, "Skip"), (all_habits, "Record past completion")):
+        trigger = habit.get_by_role("button", name="More actions for Drink water")
+        menu = habit.locator("[popover]")
+        expect(menu).to_be_hidden()
+        trigger.press("Enter")
+        expect(menu.get_by_text(action, exact=True)).to_be_visible()
+        expect(menu.get_by_role("link", name="Edit")).to_be_visible()
+        for item in menu.locator("a, button").all():
+            expect(item.locator('svg[aria-hidden="true"]')).to_have_count(1)
+        box = menu.bounding_box()
+        assert box is not None
+        assert 0 <= box["x"] < box["x"] + box["width"] <= 360
+        page.keyboard.press("Escape")
+        expect(menu).to_be_hidden()

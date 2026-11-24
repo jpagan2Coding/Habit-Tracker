@@ -189,4 +189,8 @@ def test_save_settings_ignores_autofilled_current_password_without_new_password(
     )
 
     assert response.status_code == 200
-    assert b"Your settings and preferences saved successfully" in response.data
+    message = b"Your settings and preferences saved successfully"
+    toast = response.data.split(b'id="success-toast"', 1)[1].split(b"<header", 1)[0]
+    assert response.data.count(message) == 1
+    assert b'class="fixed ' in toast
+    assert message in toast
