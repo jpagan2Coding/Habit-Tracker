@@ -10,20 +10,7 @@
 {% endblock %}
 
 
-{% macro period_label(period, unit) -%}
-{% if unit == 'week' %}Week of {{ period.start.strftime('%b %d') }}
-{%- elif unit == 'month' %}{{ period.start.strftime('%B %Y') }}
-{%- else %}{{ period.start.strftime('%b %d') }}{% endif %}
-{%- endmacro %}
-
-
-{% set status_labels = {
-    'met': 'Completed',
-    'skipped': 'Skipped',
-    'paused': 'On break',
-    'missed': 'Missed',
-    'in_progress': 'In progress',
-} %}
+{% from "apps/habit_tracker/_streak.html" import status_labels, track_record %}
 
 
 {% block content %}
@@ -154,23 +141,12 @@
                     </div>
 
 
-                    {% set periods = summary.periods %}
-                    {% set status_counts = [] %}
-                    {% for status, label in status_labels.items() %}
-                    {% set total = periods|selectattr('status', 'equalto', status)|list|length %}
-                    {% if total %}{% set _ = status_counts.append(total ~ ' ' ~ label|lower) %}{% endif %}
-                    {% endfor %}
                     <div class="mt-4">
                         <p class="text-xs font-medium text-slate-500">
                             History, by {{ summary.unit }}
                         </p>
-                        <div class="habit-history mt-2" role="img"
-                             aria-label="{{ habit.name }}, last {{ period_days }} days by {{ summary.unit }}: {{ status_counts|join(', ') }}">
-                            {% for period in periods %}
-                            <span class="habit-history-cell habit-history-{{ period.status }} habit-history-{{ summary.unit }}"
-                                  title="{{ period_label(period, summary.unit) }}: {{ status_labels[period.status] }}"></span>
-                            {% endfor %}
-                        </div>
+                        {{ track_record(summary.periods, summary.unit, habit.name,
+                                        'last ' ~ period_days ~ ' days', 'mt-2') }}
                     </div>
                     {% endif %}
                 </article>

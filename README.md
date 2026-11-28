@@ -58,6 +58,37 @@ that are on a break, uses the saved browser time zone, and stores delivery
 keys in MongoDB to prevent duplicates. Every due reminder is also stored in the dashboard Notification
 Center, even when browser push permission is denied or unsupported.
 
+## Streaks
+
+The Dashboard's **Current Streak** panel shows one habit at a time. Flip
+through habits with the arrow buttons, the ← → keys, or a swipe. Each habit's
+History page shows its current and longest streak.
+
+A streak counts **consecutive days, weeks, or months** (matching the habit's
+frequency) in which the habit's target was reached:
+
+- Reaching the target for a day, week, or month adds 1.
+- A missed day, week, or month (target not reached) resets the streak to 0.
+  This includes an "overdue" habit: the late check-in starts a new streak.
+- Skipped days and breaks neither break nor extend a streak.
+- The current day, week, or month only counts once its target is reached. While
+  it's still in progress it doesn't break the streak.
+- Weeks run Monday–Sunday and months are calendar months, the same periods used
+  by the Summary page and Today's Habits.
+
+Streaks are recalculated from the saved completion history on every page load.
+Completing, undoing, or back-filling a check-in for an earlier date updates the
+streak straight away. The rule lives in `progress.py` (`habit_periods`,
+`streaks`, `habit_streak`) and is shared by the Dashboard, History, and Summary
+pages.
+
+## App Passcode
+
+Users can lock the app with a passcode from **Settings → App passcode**. The
+passcode is hashed and kept only on the machine running the app, in
+`instance/local_passcodes.sqlite3` (or the file set by `PASSCODE_DB_PATH`). It
+is never stored in MongoDB.
+
 ## Running Tests
 
 ```bash

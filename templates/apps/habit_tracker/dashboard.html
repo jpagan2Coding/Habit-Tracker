@@ -108,6 +108,8 @@
 </style>
 {% endblock %}
 
+{% from "apps/habit_tracker/_streak.html" import unit_label, streak_definition, streak_note, track_record %}
+
 {% macro habit_action_trigger(menu_id, habit_name) %}
     <button type="button" popovertarget="{{ menu_id }}" aria-label="More actions for {{ habit_name }}"
             class="habit-action-trigger h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600">
@@ -321,34 +323,76 @@
                 </article>
 
 
-                <article class="summary-card rounded-xl border border-slate-200 bg-white p-5">
-                    <div
-                        class="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
-                        <span class="text-lg font-bold">#</span>
+                {#- Current Streak: one slide per habit. Rows mirror the neighbouring cards
+                    (icon row, label, big number, note) so the panel keeps the same size. -#}
+                <article id="streak-panel" class="summary-card min-w-0 rounded-xl border border-slate-200 bg-white p-5"
+                         role="region" aria-roledescription="carousel" aria-labelledby="streak-panel-heading">
+                    <div class="mb-3 flex h-10 items-center gap-3">
+                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+                            <svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M12 3c1 3.5 5 5.5 5 10a5 5 0 01-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-5.5 1-8.5z"></path>
+                            </svg>
+                        </div>
+                        <h2 id="streak-panel-heading" class="sr-only">Current Streak</h2>
+                        <span class="flex-1" aria-hidden="true"></span>
+                        {% if streak_slides|length > 1 %}
+                        <div class="flex shrink-0 items-center gap-1">
+                            <button type="button" data-streak-prev aria-controls="streak-track"
+                                    aria-label="Previous habit"
+                                    class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600">
+                                <svg aria-hidden="true" class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                            </button>
+                            <span data-streak-counter class="min-w-[2.75rem] text-center text-xs font-medium tabular-nums text-slate-500">
+                                1 / {{ streak_slides|length }}
+                            </span>
+                            <button type="button" data-streak-next aria-controls="streak-track"
+                                    aria-label="Next habit"
+                                    class="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-600">
+                                <svg aria-hidden="true" class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                            </button>
+                        </div>
+                        {% endif %}
                     </div>
 
+                    {% if streak_slides %}
+                    <div id="streak-track" data-streak-track class="streak-track" tabindex="-1">
+                        {% for slide in streak_slides %}
+                        {% set count = slide.current_streak %}
+                        {% set unit_text = unit_label(count, slide.unit) %}
+                        <div class="streak-slide" role="group" aria-roledescription="slide"
+                             data-habit-id="{{ slide.habit.id }}"
+                             aria-label="{{ slide.habit.name }}: {{ count }} {{ unit_text }} in a row ({{ loop.index }} of {{ loop.length }})">
+                            <p class="truncate text-sm font-medium text-slate-500">
+                                <span aria-hidden="true">Current Streak ·</span>
+                                <a href="{{ url_for('habit_history', habit_id=slide.habit.id) }}"
+                                   class="font-semibold text-slate-700 hover:text-indigo-700 hover:underline"
+                                   title="View {{ slide.habit.name }} history">{{ slide.habit.name }}</a>
+                            </p>
 
-                    <p class="text-sm font-medium text-slate-500">
-                        Current Streak
-                    </p>
+                            <div class="mt-2 flex h-9 items-center gap-3">
+                                <p class="shrink-0 text-purple-600" title="{{ streak_definition(slide.unit) }}">
+                                    <span class="text-3xl font-bold" data-streak-count>{{ count }}</span>
+                                    <span class="text-sm font-medium text-slate-500" data-streak-unit>{{ unit_text }}</span>
+                                    <span class="sr-only">in a row. {{ streak_definition(slide.unit) }}</span>
+                                </p>
+                                {% if slide.recent %}
+                                {{ track_record(slide.recent, slide.unit, slide.habit.name,
+                                                'recent track record', 'streak-strip ml-auto') }}
+                                {% endif %}
+                            </div>
 
-
-                    <p class="mt-2 text-3xl font-bold text-purple-600">
-                        {% if current_streak is not none %}
-                        {{ current_streak }} days
-                        {% else %}
-                        —
-                        {% endif %}
-                    </p>
-
-
-                    <p class="mt-1 text-sm text-slate-400">
-                        {% if current_streak is not none %}
-                        Keep it going!
-                        {% else %}
-                        Coming in a future sprint
-                        {% endif %}
-                    </p>
+                            {% set note = streak_note(slide) %}
+                            <p class="mt-1 truncate text-sm text-slate-400" title="{{ note }}" data-streak-note>{{ note }}</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <p data-streak-live class="sr-only" aria-live="polite"></p>
+                    {% else %}
+                    <p class="text-sm font-medium text-slate-500">Current Streak</p>
+                    <p class="mt-2 text-3xl font-bold text-purple-600">—</p>
+                    <p class="mt-1 text-sm text-slate-400">No habits yet · add one to start a streak</p>
+                    {% endif %}
                 </article>
             </section>
 
@@ -1016,4 +1060,95 @@ document.querySelectorAll(".complete-habit-form").forEach(form => {
 </script>
 <script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
 <script src="{{ url_for('static', filename='js/habit-bulk-delete.js') }}"></script>
+<script>
+    // Current Streak panel: flip through habits with the arrows, the ← → keys, or a swipe.
+    (function () {
+        const panel = document.getElementById("streak-panel");
+        const track = panel && panel.querySelector("[data-streak-track]");
+        if (!track) {
+            return;
+        }
+
+        const slides = Array.from(track.children);
+        const counter = panel.querySelector("[data-streak-counter]");
+        const live = panel.querySelector("[data-streak-live]");
+        const storageKey = "dashboard-streak-habit";
+        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        let index = 0;
+
+        function sync(announce) {
+            slides.forEach(function (slide, slideIndex) {
+                const active = slideIndex === index;
+                slide.inert = !active;
+                slide.setAttribute("aria-hidden", String(!active));
+            });
+            if (counter) {
+                counter.textContent = (index + 1) + " / " + slides.length;
+            }
+            if (announce && live) {
+                live.textContent = slides[index].getAttribute("aria-label");
+            }
+            try {
+                sessionStorage.setItem(storageKey, slides[index].dataset.habitId);
+            } catch (error) {
+                // Remembering the last habit is only a convenience.
+            }
+        }
+
+        function show(newIndex, options) {
+            const settings = options || {};
+            index = (newIndex + slides.length) % slides.length;
+            track.scrollTo({
+                left: index * track.clientWidth,
+                behavior: settings.smooth === false || reduceMotion ? "auto" : "smooth"
+            });
+            sync(settings.announce !== false);
+        }
+
+        const previous = panel.querySelector("[data-streak-prev]");
+        const next = panel.querySelector("[data-streak-next]");
+        if (previous) {
+            previous.addEventListener("click", function () { show(index - 1); });
+        }
+        if (next) {
+            next.addEventListener("click", function () { show(index + 1); });
+        }
+
+        panel.addEventListener("keydown", function (event) {
+            if (slides.length < 2 || (event.key !== "ArrowLeft" && event.key !== "ArrowRight")) {
+                return;
+            }
+            event.preventDefault();
+            show(index + (event.key === "ArrowLeft" ? -1 : 1));
+        });
+
+        // Keep the counter in step after a touch swipe or trackpad scroll.
+        let scrollTimer;
+        track.addEventListener("scroll", function () {
+            clearTimeout(scrollTimer);
+            scrollTimer = setTimeout(function () {
+                const settled = Math.round(track.scrollLeft / track.clientWidth);
+                if (settled !== index && settled >= 0 && settled < slides.length) {
+                    index = settled;
+                    sync(true);
+                }
+            }, 100);
+        });
+
+        window.addEventListener("resize", function () {
+            track.scrollTo({ left: index * track.clientWidth, behavior: "auto" });
+        });
+
+        let savedHabit = null;
+        try {
+            savedHabit = sessionStorage.getItem(storageKey);
+        } catch (error) {
+            savedHabit = null;
+        }
+        const savedIndex = slides.findIndex(function (slide) {
+            return slide.dataset.habitId === savedHabit;
+        });
+        show(savedIndex >= 0 ? savedIndex : 0, { announce: false, smooth: false });
+    })();
+</script>
 {% endblock %}
