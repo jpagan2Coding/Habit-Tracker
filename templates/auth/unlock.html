@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en" class="text-size-{{ text_size }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unlock | Habit Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL@0..1&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/global.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/auth.css') }}">
+</head>
+<body class="auth-page">
+    <main class="container auth-frame">
+        <div class="auth-shell">
+            <section class="auth-intro" aria-labelledby="unlock-intro-heading">
+                <span class="auth-brand">Habit Tracker</span>
+                <div class="auth-intro-copy">
+                    <span class="material-symbols-outlined auth-intro-icon" aria-hidden="true">lock</span>
+                    <p class="auth-eyebrow">APP LOCKED</p>
+                    <h1 id="unlock-intro-heading">Your habits<br>stay private.</h1>
+                    <p>Enter your passcode to view your habit information.</p>
+                </div>
+                <p class="auth-quote">“Consistency is built one check-in at a time.”</p>
+            </section>
+
+            <section class="auth-form-panel" aria-label="Unlock form">
+                <div class="auth-form-heading">
+                    <p class="auth-eyebrow">PASSCODE REQUIRED</p>
+                    <h2>Unlock Habit Tracker</h2>
+                    <p>Signed in as {{ session.get('username') or session.get('user_email') }}.</p>
+                </div>
+
+                {% if error %}
+                    <div id="passcode-error" class="auth-alert" role="alert">{{ error }}</div>
+                {% endif %}
+
+                <form method="post" action="{{ url_for('unlock_app') }}" class="auth-form">
+                    <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
+                    <input type="hidden" name="next" value="{{ next_path }}">
+                    <div class="auth-field">
+                        <label for="passcode">Passcode</label>
+                        <input id="passcode" name="passcode" type="password" inputmode="numeric"
+                               autocomplete="off" maxlength="{{ passcode_max_length }}"
+                               placeholder="Enter your passcode" required autofocus
+                               {% if error %}aria-invalid="true" aria-describedby="passcode-error"{% endif %}>
+                    </div>
+
+                    <button class="button button-dark auth-submit" type="submit">Unlock <span aria-hidden="true">&nbsp;→</span></button>
+                </form>
+
+                <details class="auth-signup text-start" {% if reset_error %}open{% endif %}>
+                    <summary>Forgot your passcode?</summary>
+                    <p class="mt-2 mb-0">Enter your account password to remove the passcode. You can create a new one in Settings.</p>
+
+                    {% if reset_error %}
+                        <div id="reset-error" class="auth-alert" role="alert">{{ reset_error }}</div>
+                    {% endif %}
+
+                    <form method="post" action="{{ url_for('unlock_app') }}" class="auth-form mt-3">
+                        <input type="hidden" name="csrf_token" value="{{ habit_csrf_token }}">
+                        <input type="hidden" name="action" value="reset">
+                        <div class="auth-field">
+                            <label for="account_password">Account password</label>
+                            <input id="account_password" name="account_password" type="password"
+                                   autocomplete="current-password" required
+                                   {% if reset_error %}aria-invalid="true" aria-describedby="reset-error"{% endif %}>
+                        </div>
+                        <button class="button auth-submit border" type="submit">Remove passcode</button>
+                    </form>
+                </details>
+
+                <form method="post" action="{{ url_for('logout') }}" class="auth-signup">
+                    Not you?
+                    <button type="submit" class="btn btn-link p-0 align-baseline" style="color: var(--color-teal); font-size: inherit;">Log out</button>
+                </form>
+            </section>
+        </div>
+    </main>
+</body>
+</html>

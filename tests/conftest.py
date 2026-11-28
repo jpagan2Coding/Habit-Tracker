@@ -41,11 +41,17 @@ def mongo_client(monkeypatch):
 
 
 @pytest.fixture
-def app(mongo_client):
+def app(mongo_client, monkeypatch, tmp_path):
     """
     Flask app configured for testing, backed by the in-memory MongoDB.
+
+    Local app passcodes go to a throwaway SQLite file so tests never touch
+    the developer's real instance/ folder.
     """
     flask_app.config.update(TESTING=True)
+    monkeypatch.setitem(
+        flask_app.config, "PASSCODE_DB_PATH", str(tmp_path / "local_passcodes.sqlite3")
+    )
     yield flask_app
 
 

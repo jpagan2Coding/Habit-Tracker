@@ -58,6 +58,13 @@ that are on a break, uses the saved browser time zone, and stores delivery
 keys in MongoDB to prevent duplicates. Every due reminder is also stored in the dashboard Notification
 Center, even when browser push permission is denied or unsupported.
 
+## App Passcode
+
+Users can lock the app with a passcode from **Settings → App passcode**. The
+passcode is hashed and kept only on the machine running the app, in
+`instance/local_passcodes.sqlite3` (or the file set by `PASSCODE_DB_PATH`). It
+is never stored in MongoDB.
+
 ## Running Tests
 
 ```bash

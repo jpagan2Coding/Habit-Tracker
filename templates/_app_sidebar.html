@@ -45,6 +45,18 @@
             Settings
         </a>
 
+        {% if app_passcode_enabled %}
+        <form action="{{ url_for('lock_app') }}" method="post">
+            <button type="submit" class="transition-colors flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left font-medium hover:bg-slate-800 hover:text-white">
+                <svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <rect x="5" y="11" width="14" height="10" rx="2" stroke-width="2"></rect>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0v4"></path>
+                </svg>
+                Lock App
+            </button>
+        </form>
+        {% endif %}
+
         <form action="{{ url_for('logout') }}" method="post">
             <button type="submit" class="transition-colors flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left font-medium hover:bg-slate-800 hover:text-white">
                 <svg aria-hidden="true" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

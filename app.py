@@ -3,6 +3,7 @@ import io
 import os
 import re
 import secrets
+import sqlite3
 import json
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache, wraps
@@ -32,6 +33,13 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 from models import FREQUENCY_CHOICES, HABIT_FILE_FIELDS, PAUSE_DURATIONS, WHEN_MISSED_CHOICES
+from passcode import (
+    PASSCODE_MAX_LENGTH,
+    PASSCODE_MIN_LENGTH,
+    PASSCODE_RULE,
+    LocalPasscodeStore,
+    validate_new_passcode,
+)
 from progress import (
     VALID_PROGRESS_PERIODS,
     build_habit_history,
@@ -144,6 +152,10 @@ app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key-change-in-pro
 app.config["DEV_TIME_TRAVEL_ENABLED"] = os.getenv(
     "DEV_TIME_TRAVEL_ENABLED", ""
 ).strip().lower() in {"1", "true", "yes", "on"}
+# App passcode hashes stay on this machine (instance/ is git-ignored), never in MongoDB.
+app.config["PASSCODE_DB_PATH"] = os.getenv("PASSCODE_DB_PATH") or os.path.join(
+    app.instance_path, "local_passcodes.sqlite3"
+)
 
 DEV_CLOCK_SESSION_KEY = "dev_clock_date"
 
@@ -291,7 +303,7 @@ def login():
 @app.route("/habit-tracker", methods=["GET", "POST"])
 @login_required
 def habit_tracker():
-    today = datetime.utcnow().date()
+    today = current_app_date()
     form = {
         "name": "",
         "description": "",
@@ -683,7 +695,7 @@ def summary():
     habits = list(
         get_db()["habits"].find({"user_email": session.get("user_email")}).sort("created_at", -1)
     )
-    today = datetime.utcnow().date()
+    today = current_app_date()
     period_days = _selected_progress_period()
 
     return render_template(
@@ -1093,6 +1105,221 @@ def set_dev_clock():
 def logout():
     session.clear()
     return redirect(url_for("home"))  # change to login once implemented
+
+
+# --- Local app passcode -------------------------------------------------------
+# A signed-in session stays locked until the user's local passcode is entered.
+# Logging in clears the session, so every new sign-in asks for the passcode again.
+PASSCODE_UNLOCKED_SESSION_KEY = "passcode_unlocked"
+# Pages a locked session may still reach: the lock screen itself, log out, and assets.
+PASSCODE_EXEMPT_ENDPOINTS = {"static", "unlock_app", "logout"}
+# Endpoints whose callers (fetch on the dashboard) expect JSON rather than a redirect.
+PASSCODE_JSON_ENDPOINTS = {"complete_habit", "uncomplete_habit"}
+APP_LOCKED_MESSAGE = "The app is locked. Enter your passcode to continue."
+
+
+def passcode_store():
+    return LocalPasscodeStore(app.config["PASSCODE_DB_PATH"])
+
+
+def _session_is_locked():
+    user_id = session.get("user_id")
+    if not user_id or session.get(PASSCODE_UNLOCKED_SESSION_KEY):
+        return False
+    return passcode_store().has_passcode(user_id)
+
+
+def _safe_next_path(value):
+    """Only allow redirects back to a path on this site after unlocking."""
+    if not value or not value.startswith("/") or value.startswith("//") or "\\" in value:
+        return None
+    return value
+
+
+def _wants_json_response():
+    return (
+        request.path.startswith("/api/")
+        or request.endpoint in PASSCODE_JSON_ENDPOINTS
+        or request.is_json
+        or request.accept_mimetypes.best == "application/json"
+    )
+
+
+@app.before_request
+def require_app_passcode():
+    """Keep habit information hidden until a locked session enters its passcode."""
+    if request.endpoint in PASSCODE_EXEMPT_ENDPOINTS:
+        return None
+
+    try:
+        locked = _session_is_locked()
+    except sqlite3.Error:
+        # Fail closed: without the store we can't tell whether this user set a passcode.
+        app.logger.error("Could not read the local passcode store.")
+        abort(503, description="Passcode storage is unavailable. Please try again later.")
+
+    if not locked:
+        return None
+
+    if _wants_json_response():
+        return jsonify({"error": APP_LOCKED_MESSAGE, "unlock_url": url_for("unlock_app")}), 401
+
+    next_path = request.full_path.rstrip("?") if request.method == "GET" else None
+    return redirect(url_for("unlock_app", next=next_path))
+
+
+@app.context_processor
+def inject_passcode_state():
+    enabled = False
+    user_id = session.get("user_id")
+    if user_id:
+        try:
+            enabled = passcode_store().has_passcode(user_id)
+        except sqlite3.Error:
+            app.logger.error("Could not read the local passcode store.")
+    return {
+        "app_passcode_enabled": enabled,
+        "passcode_min_length": PASSCODE_MIN_LENGTH,
+        "passcode_max_length": PASSCODE_MAX_LENGTH,
+        "passcode_rule": PASSCODE_RULE,
+    }
+
+
+@app.route("/unlock", methods=["GET", "POST"])
+def unlock_app():
+    """Lock screen: ask for the local passcode before showing any habit information."""
+    if not session.get("user_id") or not session.get("user_email"):
+        return redirect(url_for("login"))
+
+    user_id = session["user_id"]
+    store = passcode_store()
+    next_path = _safe_next_path(request.values.get("next"))
+
+    if session.get(PASSCODE_UNLOCKED_SESSION_KEY) or not store.has_passcode(user_id):
+        return redirect(next_path or url_for("habit_dashboard"))
+
+    error = None
+    reset_error = None
+    status = 200
+
+    if request.method == "POST":
+        _validate_habit_form_token()
+
+        if request.form.get("action") == "reset":
+            # Forgotten passcode: the account password proves ownership and clears it.
+            account_password = request.form.get("account_password", "")
+            if not account_password:
+                reset_error, status = "Enter your account password.", 400
+            else:
+                try:
+                    user = _authenticated_user(get_db()["users"])
+                except (OSError, PyMongoError, RuntimeError):
+                    app.logger.error("Database error while resetting the app passcode.")
+                    user = None
+                if user and check_password_hash(user.get("password", ""), account_password):
+                    store.remove(user_id)
+                    session.pop(PASSCODE_UNLOCKED_SESSION_KEY, None)
+                    flash(
+                        "Your passcode was removed. You can create a new one in Settings.",
+                        "success",
+                    )
+                    return redirect(url_for("settings", _anchor="passcode-heading"))
+                reset_error, status = "Incorrect account password.", 401
+        else:
+            passcode = request.form.get("passcode", "")
+            if not passcode:
+                error, status = "Enter your passcode.", 400
+            elif store.verify(user_id, passcode):
+                session[PASSCODE_UNLOCKED_SESSION_KEY] = True
+                return redirect(next_path or url_for("habit_dashboard"))
+            else:
+                error, status = "Incorrect passcode. Please try again.", 401
+
+    return render_template(
+        "auth/unlock.html",
+        page_id="unlock",
+        error=error,
+        reset_error=reset_error,
+        next_path=next_path or "",
+        habit_csrf_token=_habit_form_token(),
+    ), status
+
+
+@app.route("/lock", methods=["POST"])
+@login_required
+def lock_app():
+    """Lock the current session right away (only meaningful once a passcode exists)."""
+    if not passcode_store().has_passcode(session["user_id"]):
+        flash("Create a passcode in Settings before locking the app.", "error")
+        return redirect(url_for("settings", _anchor="passcode-heading"))
+
+    session.pop(PASSCODE_UNLOCKED_SESSION_KEY, None)
+    return redirect(url_for("unlock_app"))
+
+
+@app.route("/settings/passcode", methods=["POST"])
+@login_required
+def manage_passcode():
+    """Create, change, or remove the local app passcode."""
+    _validate_habit_form_token()
+
+    user_id = session["user_id"]
+    store = passcode_store()
+    action = request.form.get("action", "")
+    current_passcode = request.form.get("current_passcode", "")
+    new_passcode = request.form.get("new_passcode", "")
+    confirm_passcode = request.form.get("confirm_passcode", "")
+    has_passcode = store.has_passcode(user_id)
+
+    if action == "create":
+        if has_passcode:
+            error = "A passcode is already set. Use Change passcode to replace it."
+        else:
+            error = validate_new_passcode(new_passcode, confirm_passcode)
+        success = "Passcode created. You'll need it to open the app each time you sign in."
+    elif action in {"change", "remove"}:
+        if not has_passcode:
+            error = "You don't have a passcode yet."
+        elif not current_passcode:
+            error = "Enter your current passcode."
+        elif not store.verify(user_id, current_passcode):
+            error = "Current passcode is incorrect."
+        elif action == "change":
+            error = validate_new_passcode(new_passcode, confirm_passcode)
+        else:
+            error = None
+        success = (
+            "Passcode changed successfully."
+            if action == "change"
+            else "Passcode removed. The app will no longer ask for a passcode."
+        )
+    else:
+        abort(400, description="Unknown passcode action.")
+
+    settings_url = url_for("settings", _anchor="passcode-heading")
+    if error:
+        flash(error, "error")
+        return redirect(settings_url)
+
+    try:
+        if action == "remove":
+            store.remove(user_id)
+        else:
+            store.set(user_id, new_passcode)
+    except (OSError, sqlite3.Error):
+        # Never include the submitted passcode in logs.
+        app.logger.error("Could not update the local passcode store.")
+        flash("Your passcode could not be saved. Please try again.", "error")
+        return redirect(settings_url)
+
+    if action == "remove":
+        session.pop(PASSCODE_UNLOCKED_SESSION_KEY, None)
+    else:
+        # The person who just set the passcode doesn't need to unlock right away.
+        session[PASSCODE_UNLOCKED_SESSION_KEY] = True
+
+    flash(success, "success")
+    return redirect(settings_url)
 
 
 @app.route("/api/push-subscriptions", methods=["POST"])
@@ -2260,6 +2487,11 @@ def delete_account():
         if user_id and ObjectId.is_valid(user_id):
             user_filter = {"$or": [{"_id": ObjectId(user_id)}, {"email": user_email}]}
         db["users"].delete_one(user_filter)
+
+        try:
+            passcode_store().remove(user_id)
+        except (OSError, sqlite3.Error):
+            app.logger.error("Could not remove the local passcode for a deleted account.")
 
         session.clear()
         flash("Your account and all of your data have been deleted.", "success")
