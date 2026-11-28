@@ -1,0 +1,64 @@
+{#- Shared streak + track-record helpers (Summary, History, and the Dashboard streak panel).
+    Import with: {% from "apps/habit_tracker/_streak.html" import ... %} -#}
+
+{% set status_labels = {
+    'met': 'Completed',
+    'skipped': 'Skipped',
+    'paused': 'On break',
+    'missed': 'Missed',
+    'in_progress': 'In progress',
+} %}
+
+{% macro period_label(period, unit) -%}
+{% if unit == 'week' %}Week of {{ period.start.strftime('%b %d') }}
+{%- elif unit == 'month' %}{{ period.start.strftime('%B %Y') }}
+{%- else %}{{ period.start.strftime('%b %d') }}{% endif %}
+{%- endmacro %}
+
+{#- "day"/"days", "week"/"weeks", ... -#}
+{% macro unit_label(count, unit) -%}
+{{ unit ~ ('' if count == 1 else 's') }}
+{%- endmacro %}
+
+{% macro this_period(unit) -%}
+{{ {'day': 'today', 'week': 'this week', 'month': 'this month'}[unit] }}
+{%- endmacro %}
+
+{#- Exactly what the streak counts, e.g. "Consecutive days where you hit your target." -#}
+{% macro streak_definition(unit) -%}
+Consecutive {{ unit }}s where you hit your target.
+{%- endmacro %}
+
+{#- One short line on where the streak stands right now. -#}
+{% macro streak_note(streak) -%}
+{% set now = this_period(streak.unit) %}
+{%- if streak.starts_on -%}
+Starts {{ streak.starts_on.strftime('%b %d') }}
+{%- elif streak.today_status == 'met' -%}
+In a row, including {{ now }}
+{%- elif streak.today_status == 'skipped' -%}
+Skipped {{ now }} · streak is safe
+{%- elif streak.today_status == 'paused' -%}
+On a break · streak is safe
+{%- elif streak.current_streak -%}
+In a row · check in {{ now }} to make it {{ streak.current_streak + 1 }}
+{%- else -%}
+Check in {{ now }} to start a streak
+{%- endif -%}
+{%- endmacro %}
+
+{#- Row of colored cells, oldest first. Uses the .habit-history-* styles from habit-tracker.css. -#}
+{% macro track_record(periods, unit, habit_name, description, extra_class='') -%}
+{% set status_counts = [] %}
+{% for status, label in status_labels.items() %}
+{% set total = periods|selectattr('status', 'equalto', status)|list|length %}
+{% if total %}{% set _ = status_counts.append(total ~ ' ' ~ label|lower) %}{% endif %}
+{% endfor %}
+<div class="habit-history {{ extra_class }}" role="img"
+     aria-label="{{ habit_name }}, {{ description }} by {{ unit }}: {{ status_counts|join(', ') or 'no history yet' }}">
+    {% for period in periods %}
+    <span class="habit-history-cell habit-history-{{ period.status }} habit-history-{{ unit }}"
+          title="{{ period_label(period, unit) }}: {{ status_labels[period.status] }}"></span>
+    {% endfor %}
+</div>
+{%- endmacro %}

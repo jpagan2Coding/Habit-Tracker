@@ -47,6 +47,7 @@ from progress import (
     completion_count_on,
     current_break,
     current_period_progress,
+    habit_streak,
     habit_summary,
     period_start,
     target_on,
@@ -668,9 +669,10 @@ def habit_dashboard():
         completion_percentage=completion_percentage,
         overall_progress=overall_progress,
         progress_periods=VALID_PROGRESS_PERIODS,
-        # Not built yet. Team rule: a skipped day neither breaks nor extends a streak, and
-        # neither does a day on a break (use progress.current_break to spot those).
-        current_streak=None,
+        # One slide per habit in the Current Streak panel, in the same order as All My Habits.
+        streak_slides=[
+            {"habit": habit, **habit_streak(habit, today_date)} for habit in habits
+        ],
         today=today,
         habit_csrf_token=_habit_form_token(),
         notifications=notifications,
@@ -1423,6 +1425,7 @@ def habit_history(habit_id):
         "apps/habit_tracker/history.html",
         habit=habit,
         current_target=target_on(habit, today),
+        streak=habit_streak(habit, today),
         habit_id=habit_id,
         history=history,
         selected_period=period,

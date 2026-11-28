@@ -389,6 +389,34 @@ def streaks(periods):
     return current, longest
 
 
+def habit_streak(habit, today, recent_count=7):
+    """Return one habit's current streak, for the Dashboard streak panel and history page.
+
+    Uses the same periods and rule as the Summary page, so every page agrees:
+    the streak counts consecutive days, weeks, or months (``unit``) in which the
+    target was hit. A missed period resets it to 0. Skipped periods and breaks
+    neither break nor extend it. The current period only adds to the streak once
+    its target is met, and doesn't break it while still in progress.
+    Because it's recalculated from the saved history every time, completing,
+    undoing, or back-filling a check-in is reflected straight away.
+
+    ``today_status`` is the current period's status (``met``, ``in_progress``,
+    ``skipped`` or ``paused``), or None when the habit hasn't started.
+    ``recent`` holds the last ``recent_count`` periods, oldest first.
+    """
+    periods = habit_periods(habit, today)
+    current_streak, longest_streak = streaks(periods)
+    start_day = _start_day(habit)
+    return {
+        "unit": PERIOD_UNITS[_frequency(habit)],
+        "current_streak": current_streak,
+        "longest_streak": longest_streak,
+        "starts_on": start_day if not periods and start_day and start_day > today else None,
+        "today_status": periods[-1]["status"] if periods else None,
+        "recent": periods[-recent_count:],
+    }
+
+
 def habit_summary(habit, today, period_days=7):
     """Return the streaks and completion rate shown for one habit on the summary page.
 

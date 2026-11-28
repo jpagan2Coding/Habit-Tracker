@@ -115,3 +115,38 @@
     background: #ffffff;
     border: 1px dashed #64748b;
 }
+
+/* Dashboard "Current Streak" panel: one slide per habit, swiped or flipped with the
+   arrow buttons. Scroll snapping keeps exactly one slide in view, so the card never
+   changes size; the scrollbar is hidden because the buttons and counter replace it. */
+.streak-track {
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+}
+
+.streak-track::-webkit-scrollbar {
+    display: none;
+}
+
+.streak-track:focus {
+    outline: none;
+}
+
+.streak-slide {
+    flex: 0 0 100%;
+    min-width: 0;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+}
+
+/* Keeps the newest periods on the right; on a narrow card the oldest ones are clipped. */
+.streak-strip {
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+    min-width: 0;
+    overflow: hidden;
+}
